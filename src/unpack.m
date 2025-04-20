@@ -44,11 +44,12 @@ K = size(h_hat, 1); % Delay axis
 M = size(h_hat, 2); % Number of array elements
 T = size(h_hat, 3); % Time axis
 
+theta_hat = zeros(length(array_index), ceil(T*fs_delay/fs_time));
 if isfield(channel, 'theta_hat')
-    theta_hat = channel.theta_hat(array_index, :);
+    theta_hat = theta_hat + channel.theta_hat(array_index, :);
 end
 if isfield(channel, 'f_resamp') % If we have additional parameter to resample
-    theta_hat = repmat((1 / channel.f_resamp - 1) * 2 * pi * fc * (1:ceil(T*fs_delay/fs_time)) / fs_delay, M, 1);
+    theta_hat = theta_hat + (1 / channel.f_resamp - 1) * 2 * pi * fc * (1:ceil(T*fs_delay/fs_time)) / fs_delay;
 end
 
 %% Allocate some buffer
