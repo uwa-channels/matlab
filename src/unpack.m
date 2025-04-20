@@ -43,9 +43,12 @@ fc = params.fc; % Center frequency
 K = size(h_hat, 1); % Delay axis
 M = size(h_hat, 2); % Number of array elements
 T = size(h_hat, 3); % Time axis
-theta_hat = channel.theta_hat(array_index, :);
+
+if isfield(channel, 'theta_hat')
+    theta_hat = channel.theta_hat(array_index, :);
+end
 if isfield(channel, 'f_resamp') % If we have additional parameter to resample
-    theta_hat = theta_hat + (1 / channel.f_resamp - 1) * 2 * pi * fc * (1:ceil(T*fs_delay/fs_time)) / fs_delay;
+    theta_hat = repmat((1 / channel.f_resamp - 1) * 2 * pi * fc * (1:ceil(T*fs_delay/fs_time)) / fs_delay, M, 1);
 end
 
 %% Allocate some buffer
@@ -68,13 +71,18 @@ delays = (0:K - 1) ./ fs_delay;
 unpacked_channel = zeros(size(h_hat, 1), length(array_index), ceil(size(h_hat, 3)*p1/q1));
 for m = 1:length(array_index)
     h_hat_m = squeeze(h_hat(:, m, :));
-    theta_hat_resampled = resample(theta_hat(m, :), p2, q2);
-    drift = theta_hat_resampled ./ (2 * pi * fc);
-    unpacked_channel(:, m, :) = resample(h_hat_m, p1, q1, 'Dimension', 2) .* exp(1j*theta_hat_resampled);
-    for t = 1:size(unpacked_channel, 3)
-        unpacked_channel(:, m, t) = interp1(delays, squeeze(unpacked_channel(:, m, t)), delays+drift(t), 'spline');
+    if isfield(channel, 'theta_hat') || isfield(channel, 'f_resamp')
+        theta_hat_resampled = resample(theta_hat(m, :), p2, q2);
+        drift = theta_hat_resampled ./ (2 * pi * fc);
+        unpacked_channel(:, m, :) = resample(h_hat_m, p1, q1, 'Dimension', 2) .* exp(1j*theta_hat_resampled);
+        for t = 1:size(unpacked_channel, 3)
+            unpacked_channel(:, m, t) = interp1(delays, squeeze(unpacked_channel(:, m, t)), delays+drift(t), 'spline');
+        end
+    else
+        unpacked_channel(:, m, :) = resample(h_hat_m, p1, q1, 'Dimension', 2);
     end
 end
 unpacked_channel = unpacked_channel ./ max(abs(unpacked_channel), [], 'all');
+end
 
 % [EOF]
