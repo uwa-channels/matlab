@@ -45,15 +45,11 @@ function output = replay(input, fs, array_index, channel, varargin)
 validate_inputs(input, fs, array_index, channel);
 
 %% Unpacking variables
-h_hat = channel.h_hat(:, array_index, :); % Channel matrix, delay x receiver x time.
 fs_delay = channel.params.fs_delay; % Sampling rate in delay domain.
 fs_time = channel.params.fs_time; % Sampling rate in time.
 fc = channel.params.fc; % Channel center frequency.
 M = length(array_index); % Number of array elements in user's input.
-L = size(h_hat, 1); % Length of channel estimator.
-if isfield(channel, 'theta_hat')
-    theta_hat = channel.theta_hat(array_index, :); % PLL outputs, receiver x time.
-end
+L = size(channel.h_hat, 1); % Length of channel estimator.
 
 %% Convert to baseband and resample the baseband to fs_delay
 [p, q] = rat(fs_delay/fs);
@@ -63,7 +59,7 @@ T = length(baseband);
 
 %% Assign random start point in time (for reproducibility only)
 buffer = 20; % extra buffer for extrapolation
-T_max = size(h_hat, 3) / fs_time * fs_delay;
+T_max = size(channel.h_hat, 3) / fs_time * fs_delay;
 if nargin ~= 5
     start = randi([0, T_max - T - L - buffer - 1])
 else
@@ -78,14 +74,14 @@ signal_start = floor(min(signal_time)*fs_time);
 signal_end = ceil(max(signal_time)*fs_time);
 [p1, q1] = rat(fs_delay/fs_time);
 for m = 1:M
-    h_hat_m = flip(squeeze(h_hat(:, m, :)), 1);
+    h_hat_m = flip(squeeze(channel.h_hat(:, array_index(m), :)), 1);
     ir = resample(h_hat_m(:, signal_start:signal_end).', p1, q1, 'Dimension', 1);
     if isfield(channel, 'theta_hat')
         for t = 1:T + L - 1
-            output(t, m) = ir(t, :) * baseband(t:t+L-1) .* exp(1j*theta_hat(m, t+start-1));
+            output(t, m) = ir(t, :) * baseband(t:t+L-1) .* exp(1j*channel.theta_hat(array_index(m), t+start-1));
         end
         % Insert the drift
-        drift = theta_hat(m, (0:T + L + buffer - 1)+start) ./ (2 * pi * fc);
+        drift = channel.theta_hat(array_index(m), (0:T + L + buffer - 1)+start) ./ (2 * pi * fc);
         output(:, m) = interp1(signal_time, output(:, m), signal_time+drift, 'spline');
     else
         for t = 1:T + L - 1
