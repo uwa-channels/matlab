@@ -108,7 +108,7 @@ classdef testReplay < matlab.unittest.TestCase
             h_hat(inds) = c_p;
             h_hat = repmat(h_hat, 1, 1, round(params.channel_time*params.fs_time));
 
-            f_resamp = 1/(1 + params.velocity / 1545);
+            f_resamp = 1/(1 + params.velocity / c);
             a = 1 - 1 / f_resamp;
             t = 1:round(params.channel_time*params.fs_delay);
             t = repmat(t, params.M, 1);
