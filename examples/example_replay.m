@@ -28,6 +28,7 @@ R = 4e3; % Symbol rate
 M = size(channel.h_hat, 2); % Number of channels
 n_repeat = 10; % Number of repeats
 array_index = [1, 2, 3]; % Channel index
+textbook_noise = false;
 
 %% Generate single carrier signals
 data_symbol = randi([0, 1].', 1023, 1) * 2 - 1;
@@ -37,8 +38,11 @@ input = [zeros(round(fs/10), 1); passband; zeros(round(fs/10), 1);];
 
 %% Replay and generate noise
 y = replay(input, fs, array_index, channel);
-w = noisegen(size(y), fs);
-% w = noisegen(size(y), fs, array_index, noise);
+if textbook_noise
+    w = noisegen(size(y), fs);
+else
+    w = noisegen(size(y), fs, array_index, noise);
+end
 
 %% Add the noise
 r = y + 0.05 * w;
