@@ -18,7 +18,7 @@ To load the channel and noise MAT-files, and replay a signal of your choice thro
 channel = load('blue_1.mat');
 noise = load('blue_1_noise.mat');
 y = replay(input, fs, array_index, channel);
-w = noisegen(size(y), fs);
+w = noisegen(size(y), fs, array_index, noise);
 r = y + 0.05 * w;
 ```
 
@@ -35,6 +35,13 @@ unpacked = unpack(fs_time, array_index, channel);
 See `examples/example_unpack.m` for details.
 
 [![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=uwa-channels/matlab)
+
+## Tests
+This repository includes automated testing and deployment powered by [GitHub Actions](https://github.com/uwa-channels/matlab/actions). In the [tests](/tests) folder, you will find three test suites covering the core functionalities: replay, noise generation, and unpacking.
+
+In particular, the replay test suite generates a random mobile channel and transmits a signal through it. A simple matched filter is then applied to verify whether the correlation peaks correspond to the actual channel multipath structure. If specific criteria are met, the test passes.
+
+These tests are executed automatically whenever changes are made to the source code, ensuring the continued correctness of the core functionalities.
 
 # License
 The license is available in the [LICENSE](LICENSE) file within this repository.
