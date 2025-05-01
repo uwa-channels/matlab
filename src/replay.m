@@ -69,13 +69,11 @@ end
 %% Convolution and insert the drift
 output = zeros(T+buffer+L, M);
 baseband = [zeros(L-1, 1); baseband; zeros(L-1, 1)];
+channel_time = (0:size(channel.h_hat, 3) - 1) ./ fs_time;
 signal_time = ((0:T + L + buffer - 1) + start) ./ fs_delay;
-signal_start = floor(min(signal_time)*fs_time);
-signal_end = ceil(max(signal_time)*fs_time);
-[p1, q1] = rat(fs_delay/fs_time);
 for m = 1:M
-    h_hat_m = flip(squeeze(channel.h_hat(:, array_index(m), :)), 1);
-    ir = resample(h_hat_m(:, signal_start:signal_end).', p1, q1, 'Dimension', 1);
+    h_hat_m = flip(squeeze(channel.h_hat(:, array_index(m), :)).', 2);
+    ir = interp1(channel_time, h_hat_m, signal_time, 'spline');
     if isfield(channel, 'theta_hat')
         for t = 1:T + L - 1
             output(t, m) = ir(t, :) * baseband(t:t+L-1) .* exp(1j*channel.theta_hat(array_index(m), t+start-1));
