@@ -9,7 +9,7 @@ classdef testNoise < matlab.unittest.TestCase
     methods (Test)
 
         function testNoiseOption1(testCase)
-            input = zeros(1000, 4);
+            input = zeros(1000000, 4);
             fs = 48000;
 
             w = noisegen(size(input), fs);
@@ -19,7 +19,7 @@ classdef testNoise < matlab.unittest.TestCase
         end
 
         function testNoiseOption2(testCase)
-            input = zeros(1000, 4);
+            input = zeros(1000000, 4);
             array_index = [1, 2, 3, 4];
             fs = 48000;
             noise.Fs = fs;
@@ -33,8 +33,8 @@ classdef testNoise < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(w), 'all'));
         end
 
-        function testImpulsiveNoise1(testCase)
-            input = zeros(1000, 3);
+        function testNoiseOption3(testCase)
+            input = zeros(1000000, 3);
             array_index = [1, 2, 3];
             fs = 48000;
             noise.alpha = 1.7;
