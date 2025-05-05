@@ -27,7 +27,7 @@ function w = noisegen(input_size, fs, varargin)
 %
 %
 % Other m-files required: None
-% Subfunctions: validate_inputs, pwr, noise_option_1, noise_option_2, noise_option_3
+% Subfunctions: validate_inputs, noise_option_1, noise_option_2, noise_option_3
 % Toolbox required: Signal Processing Toolbox (R) (resample function).
 % MAT-files optional: noise matfile.
 %
@@ -63,12 +63,6 @@ else
     error('Wrong noise option.');
 end
 end
-
-
-function p = pwr(x)
-p = mean(abs(x).^2, 1);
-end
-
 
 function validate_inputs(input_size, noise, array_index)
 % Noise version checking
@@ -109,8 +103,6 @@ filter_shape(1:half_N, :) = repmat(1./(freqs(2:half_N+1).^(alpha / 2)), 1, M);
 filter_shape(half_N:end-1, :) = flip(filter_shape(1:half_N, :), 1);
 filtered_spectrum = spectrum .* filter_shape;
 w = real(ifft(filtered_spectrum));
-w = w - mean(w, 1);
-w = w(1:input_size(1), :) ./ sqrt(pwr(w));
 end
 
 
@@ -119,7 +111,6 @@ function w = noise_option_2(input_size, fs, noise, array_index)
 [p, q] = rat(fs/noise.Fs);
 signal_size = input_size;
 signal_size(1) = ceil(signal_size(1)*q/p);
-noise.h = noise.h ./ sqrt(pwr(noise.h));
 n = randn(signal_size(1), size(noise.sigma, 1)) * chol(noise.sigma);
 w = zeros(signal_size);
 for m = 1:signal_size(2)
@@ -130,7 +121,6 @@ w_resampled = zeros(ceil(size(w, 1)*p/q), size(w, 2));
 for m = 1:size(w, 2)
     w_resampled(:, m) = resample(w(:, m), p, q);
 end
-w = w_resampled ./ sqrt(sum(pwr(w_resampled)));
 w = w(1:input_size(1), :);
 end
 
@@ -163,8 +153,6 @@ w_resampled = zeros(ceil(size(w, 1)*p/q), size(w, 2));
 for m = 1:size(w, 2)
     w_resampled(:, m) = resample(w(:, m), p, q);
 end
-w = w_resampled ./ sqrt(sum(pwr(w_resampled)));
-w = 1 ./ sqrt(sum(pwr(w))) .* w;
 w = w(1:input_size(1), :);
 end
 
