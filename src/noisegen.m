@@ -87,22 +87,20 @@ end
 
 function w = noise_option_1(input_size, fs)
 % Generate textbook style noise: independent pink Gaussian noise (17dB/decade) across array elements.
-if mod(input_size(1), 2) == 1
-    N = input_size(1) + 1;
-else
-    N = input_size(1);
+nfft = 4096;
+fmin = 0;
+fmax = fs/2;
+f = linspace(fs/2/nfft, fs/2, nfft);
+H_dB = -17 * log10(f/1e3);
+H_oneside = 10.^(H_dB / 10);
+H_oneside(1:floor(fmin/(fs / 2 / nfft))) = 0;
+H_oneside(ceil(fmax/(fs / 2 / nfft)):end) = 0;
+H = sqrt([H_oneside, flip(H_oneside(2:end))]);
+h = fftshift(ifft(H));
+w = randn(input_size);
+for m = 1:input_size(2)
+    w(:, m) = conv(w(:, m), h, 'same');
 end
-M = input_size(2);
-white_noise = randn(N, M);
-spectrum = fft(white_noise, [], 1);
-freqs = (0:N / 2)' * fs / N;
-alpha = 1.7;
-half_N = floor(N/2);
-filter_shape = ones(N, M);
-filter_shape(1:half_N, :) = repmat(1./(freqs(2:half_N+1).^(alpha / 2)), 1, M);
-filter_shape(half_N:end-1, :) = flip(filter_shape(1:half_N, :), 1);
-filtered_spectrum = spectrum .* filter_shape;
-w = real(ifft(filtered_spectrum));
 end
 
 
@@ -116,11 +114,7 @@ w = zeros(signal_size);
 for m = 1:signal_size(2)
     w(:, m) = conv(n(:, array_index(m)), noise.h(:, array_index(m)), 'same');
 end
-w = w - mean(w, 1);
-w_resampled = zeros(ceil(size(w, 1)*p/q), size(w, 2));
-for m = 1:size(w, 2)
-    w_resampled(:, m) = resample(w(:, m), p, q);
-end
+w = resample(w, p, q, 'Dimension', 1);
 w = w(1:input_size(1), :);
 end
 
@@ -147,12 +141,7 @@ for i = 1:N
         end
     end
 end
-
-w = w(:, array_index);
-w_resampled = zeros(ceil(size(w, 1)*p/q), size(w, 2));
-for m = 1:size(w, 2)
-    w_resampled(:, m) = resample(w(:, m), p, q);
-end
+w = resample(w(:, array_index), p, q, 'Dimension', 1);
 w = w(1:input_size(1), :);
 end
 
