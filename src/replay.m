@@ -1,33 +1,32 @@
 function output = replay(input, fs, array_index, channel, varargin)
-% REPLAY Pass the signal through the given underwater acoustic channel.
+% REPLAY Passes a passband signal through an underwater acoustic channel.
 %
-% OUTPUT = REPLAY(INPUT, FS, ARRAY_INDEX, CHANNEL) returns the OUTPUT
-% signal after being processed through the CHANNEL. FS is the sampling
-% frequency of the INPUT signal, ARRAY_INDEX specifies the indices
-% of the CHANNEL, and CHANNEL is a struct containing the estimated
-% channel coefficients, digital phase-locked loop outputs, and
-% other relevant parameters.
+% OUTPUT = REPLAY(INPUT, FS, ARRAY_INDEX, CHANNEL) returns the received OUTPUT
+% signal after the INPUT passband signal is processed through the CHANNEL.
+% FS is the sampling frequency of the INPUT signal, ARRAY_INDEX specifies the 
+% hydrophone indices, and CHANNEL is a struct containing the estimated 
+% channel coefficients and other relevant parameters.
 %
-% OUTPUT = REPLAY(INPUT, FS, ARRAY_INDEX, CHANNEL, START) specifies
-% the START index of the channel traces, for reproducibility.
+% OUTPUT = REPLAY(INPUT, FS, ARRAY_INDEX, CHANNEL, START) specifies the START 
+% index of the channel traces for reproducibility.
 %
 % Inputs:
-%    input               - Input signal (time-by-array).
+%    input               - Input passband signal (time-by-array).
 %    fs                  - Sampling frequency of the input signal in Hz.
-%    array_index         - Indices of the hydrophone.
+%    array_index         - Indices of the hydrophones.
 %    channel             - Struct containing parameters and impulse responses.
-%    varargin            - Optional parameter to specify start point in time.
+%    varargin            - Optional parameter specifying the start time index.
 %
 % Outputs:
 %    output              - Processed output signal.
 %
 % Example:
-%    see example_replay.m.
+%    See example_replay.m.
 %
 % Other m-files required: None
 % Subfunctions: validate_inputs, pwr
-% Toolbox required: Signal Processing Toolbox (R) (resample function).
-% MAT-files required: channel matfile.
+% Toolbox required: Signal Processing Toolbox (for resample function).
+% MAT-files required: Channel MAT-file.
 %
 % See also: noisegen.m
 %
@@ -37,8 +36,7 @@ function output = replay(input, fs, array_index, channel, varargin)
 % License: MIT
 %
 % Revision history:
-%   - Apr. 1, 2025: initial release.
-%
+%   - Apr. 1, 2025: Initial release.
 %
 
 %% Simple checks
