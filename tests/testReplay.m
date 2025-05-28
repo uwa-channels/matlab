@@ -149,7 +149,7 @@ classdef testReplay < matlab.unittest.TestCase
 
             %% Plot the correlation
 
-            h2 = subplot(212); hold on;
+            h2 = subplot(212); hold on; max_xcor = 0;
             for m = 1 : params.M
                 v = r(:, m) .* exp(-2j*pi*params.fc*(0:size(r, 1) - 1).'./fs);
                 [xcor, lags] = xcorr(v, baseband_resampled);
@@ -158,7 +158,10 @@ classdef testReplay < matlab.unittest.TestCase
                 lags(lags <= 0) = [];
                 [~, sync(m)] = max(abs(xcor));
                 lags = lags - sync(m);
-                xcor = abs(xcor) ./ max(abs(xcor));
+                if m == 1
+                    max_xcor = max(abs(xcor));
+                end
+                xcor = abs(xcor) ./ max_xcor;
 
                 window = (lags >= params.Tmp * -0.2 * fs) .* (lags <= params.Tmp * 1.5 * fs);
                 xcor(~window) = [];
