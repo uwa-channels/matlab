@@ -1,5 +1,5 @@
-[![CI](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml/badge.svg)](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/uwa-channels/matlab/graph/badge.svg?token=NQ1M28NGYM)](https://codecov.io/gh/uwa-channels/matlab)
+[![CI](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml/badge.svg)](https://github.com/uwa-channels/replay_matlab/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/uwa-channels/matlab/graph/badge.svg?token=NQ1M28NGYM)](https://codecov.io/gh/uwa-channels/replay_matlab)
 
 # Underwater Acoustic Channel Toolbox - MATLAB / Octave
 
@@ -7,7 +7,7 @@
 
 MATLAB®/Octave toolbox to apply underwater acoustic channels to a signal of your choice, or to unpack an underwater acoustic channel. To learn more about the channels, check out the [documentation](https://uwa-channels.github.io/). 
 
-Please report bugs and suggest enhancements by [creating a new issue](https://github.com/uwa-channels/matlab/issues). We welcome your comments.  See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+Please report bugs and suggest enhancements by [creating a new issue](https://github.com/uwa-channels/replay_matlab/issues). We welcome your comments.  See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 
 ## Using the replay and noise generation functions
 
@@ -37,7 +37,7 @@ See `examples/example_unpack.m` for details.
 [![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=uwa-channels/matlab)
 
 ## Tests
-This repository includes automated testing and deployment powered by [GitHub Actions](https://github.com/uwa-channels/matlab/actions). In the [tests](/tests) folder, you will find three test suites covering the core functionalities: replay, noise generation, and unpacking.
+This repository includes automated testing and deployment powered by [GitHub Actions](https://github.com/uwa-channels/replay_matlab/actions). In the [tests](/tests) folder, you will find three test suites covering the core functionalities: replay, noise generation, and unpacking.
 
 In particular, the replay test suite generates a random mobile channel and transmits a signal through it. A simple matched filter is then applied to verify whether the correlation peaks correspond to the actual channel multipath structure. If specific criteria are met, the test passes.
 
