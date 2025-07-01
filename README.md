@@ -1,5 +1,5 @@
-[![CI](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml/badge.svg)](https://github.com/uwa-channels/replay_matlab/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/uwa-channels/matlab/graph/badge.svg?token=NQ1M28NGYM)](https://codecov.io/gh/uwa-channels/replay_matlab)
+[![CI](https://github.com/uwa-channels/replay_matlab/actions/workflows/ci.yml/badge.svg)](https://github.com/uwa-channels/replay_matlab/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/uwa-channels/replay_matlab/graph/badge.svg?token=NQ1M28NGYM)](https://codecov.io/gh/uwa-channels/replay_matlab)
 
 # Underwater Acoustic Channel Toolbox - MATLAB / Octave
 
@@ -34,7 +34,7 @@ unpacked = unpack(fs_time, array_index, channel);
 
 See `examples/example_unpack.m` for details.
 
-[![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=uwa-channels/matlab)
+[![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=uwa-channels/replay_matlab)
 
 ## Tests
 This repository includes automated testing and deployment powered by [GitHub Actions](https://github.com/uwa-channels/replay_matlab/actions). In the [tests](/tests) folder, you will find three test suites covering the core functionalities: replay, noise generation, and unpacking.
