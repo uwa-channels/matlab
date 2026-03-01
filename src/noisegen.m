@@ -57,10 +57,22 @@ elseif nargin == 4
     if ~isfield(noise, 'alpha')
         w = noise_option_2(input_size, fs, noise, array_index);
     else
-        w = noise_option_3(input_size, fs, noise, array_index);
+      if ~isfield(noise, 'rms_power')
+          s = 1;
+      else
+        s = noise.rms_power(:).';
+      end
+
+    w = noise_option_3(input_size, fs, noise, array_index) .* s ;
+
+    if isfield(noise, 'fc') && isfield(noise, 'R')
+      fl = noise.fc - noise.R/2*1.1;
+      fh = noise.fc + noise.R/2*1.1;
+      w = bandpass(w, [fl, fh], fs, "steepness", 0.9);
     end
+  end
 else
-    error('Wrong noise option.');
+  error('Wrong noise option.');
 end
 end
 
@@ -266,16 +278,16 @@ function x = stabrnd(alpha, beta, c, delta, m, n)
 
 % Errortraps:
 if alpha < .1 | alpha > 2
-    disp('Alpha must be in [.1,2] for function STABRND.')
-    alpha
-    x = NaN * zeros(m, n);
-    return
+  disp('Alpha must be in [.1,2] for function STABRND.')
+  alpha
+  x = NaN * zeros(m, n);
+  return
 end
 if abs(beta) > 1
-    disp('Beta must be in [-1,1] for function STABRND.')
-    beta
-    x = NaN * zeros(m, n);
-    return
+  disp('Beta must be in [-1,1] for function STABRND.')
+  beta
+  x = NaN * zeros(m, n);
+  return
 end
 
 % Generate exponential w and uniform phi:
@@ -284,38 +296,38 @@ phi = (rand(m, n) - .5) * pi;
 
 % Gaussian case (Box-Muller):
 if alpha == 2
-    x = (2 * sqrt(w) .* sin(phi));
-    x = delta + c * x;
-    return
+  x = (2 * sqrt(w) .* sin(phi));
+  x = delta + c * x;
+  return
 end
 
 % Symmetrical cases:
 if beta == 0
-    if alpha == 1 % Cauchy case
-        x = tan(phi);
-    else
-        x = ((cos((1 - alpha)*phi) ./ w).^(1 / alpha - 1) ...
-            .* sin(alpha * phi) ./ cos(phi).^(1 / alpha));
-    end
+  if alpha == 1 % Cauchy case
+    x = tan(phi);
+  else
+    x = ((cos((1 - alpha)*phi) ./ w).^(1 / alpha - 1) ...
+      .* sin(alpha * phi) ./ cos(phi).^(1 / alpha));
+  end
 
-    % General cases:
+  % General cases:
 else
-    cosphi = cos(phi);
-    if abs(alpha-1) > 1.e-8
-        zeta = beta * tan(pi*alpha/2);
-        aphi = alpha * phi;
-        a1phi = (1 - alpha) * phi;
-        x = ((sin(aphi) + zeta * cos(aphi)) ./ cosphi) ...
-            .* ((cos(a1phi) + zeta * sin(a1phi)) ...
-            ./ (w .* cosphi)).^((1 - alpha) / alpha);
-    else
-        bphi = (pi / 2) + beta * phi;
-        x = (2 / pi) * (bphi .* tan(phi) - beta * log((pi / 2)*w ...
-            .*cosphi./bphi));
-        if alpha ~= 1
-            x = x + beta * tan(pi * alpha/2);
-        end
+  cosphi = cos(phi);
+  if abs(alpha-1) > 1.e-8
+    zeta = beta * tan(pi*alpha/2);
+    aphi = alpha * phi;
+    a1phi = (1 - alpha) * phi;
+    x = ((sin(aphi) + zeta * cos(aphi)) ./ cosphi) ...
+      .* ((cos(a1phi) + zeta * sin(a1phi)) ...
+      ./ (w .* cosphi)).^((1 - alpha) / alpha);
+  else
+    bphi = (pi / 2) + beta * phi;
+    x = (2 / pi) * (bphi .* tan(phi) - beta * log((pi / 2)*w ...
+      .*cosphi./bphi));
+    if alpha ~= 1
+      x = x + beta * tan(pi * alpha/2);
     end
+  end
 end
 
 % Finale:
