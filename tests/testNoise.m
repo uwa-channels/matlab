@@ -16,7 +16,7 @@ classdef testNoise < matlab.unittest.TestCase
   %
   % See also: noisegen.m, replay.m
   %
-  % Author: Zhengnan Li / Claude (Opus 4.6)
+  % Author: Zhengnan Li
   % Email : uwa-channels@ofdm.link
   %
   % License: MIT
@@ -252,4 +252,12 @@ noise.alpha = alpha;
 noise.Fs = Fs;
 noise.beta = repmat(eye(M), [1, 1, 65]);
 noise.version = 1.0;
+end
+
+function k = kurtosis(x)
+x = x(:);
+mu = mean(x);
+m2 = mean((x - mu).^2);
+m4 = mean((x - mu).^4);
+k = m4 / m2^2;
 end
