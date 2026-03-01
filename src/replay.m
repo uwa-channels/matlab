@@ -59,7 +59,7 @@ T = length(baseband);
 buffer = 20; % extra buffer for extrapolation
 T_max = size(channel.h_hat, 3) / fs_time * fs_delay;
 if nargin ~= 5
-    start = randi([0, T_max - T - L - buffer - 1])
+    start = randi([1, T_max - T - L - buffer - 1])
 else
     start = varargin{end}
 end
@@ -72,13 +72,17 @@ signal_time = ((0:T + L + buffer - 1) + start) ./ fs_delay;
 for m = 1:M
     h_hat_m = flip(squeeze(channel.h_hat(:, array_index(m), :)).', 2);
     ir = interp1(channel_time, h_hat_m, signal_time, 'spline');
-    if isfield(channel, 'theta_hat')
+    if isfield(channel, 'phi_hat')
+        for t = 1:T + L - 1
+            output(t, m) = ir(t, :) * baseband(t:t+L-1) .* exp(1j*channel.phi_hat(array_index(m), t+start-1));
+        end
+        % Insert the drift
+        drift = channel.phi_hat(array_index(m), (0:T + L + buffer - 1)+start) ./ (2 * pi * fc);
+        output(:, m) = interp1(signal_time, output(:, m), signal_time+drift, 'spline');
+    elseif isfield(channel, 'theta_hat')
         for t = 1:T + L - 1
             output(t, m) = ir(t, :) * baseband(t:t+L-1) .* exp(1j*channel.theta_hat(array_index(m), t+start-1));
         end
-        % Insert the drift
-        drift = channel.theta_hat(array_index(m), (0:T + L + buffer - 1)+start) ./ (2 * pi * fc);
-        output(:, m) = interp1(signal_time, output(:, m), signal_time+drift, 'spline');
     else
         for t = 1:T + L - 1
             output(t, m) = ir(t, :) * baseband(t:t+L-1);
