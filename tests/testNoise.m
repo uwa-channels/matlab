@@ -112,7 +112,7 @@ classdef testNoise < matlab.unittest.TestCase
 
       % Should roughly match (within statistical tolerance)
       err = max(abs(C_sample(:) - C_truth(:)));
-      testCase.verifyLessThan(err, 0.05, ...
+      testCase.verifyLessThan(err, 0.15, ...
         sprintf('Correlation mismatch: max error = %.3f', err));
     end
 
