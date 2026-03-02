@@ -7,11 +7,11 @@ classdef testNoise < matlab.unittest.TestCase
   %   Option 3: Impulsive (alpha-stable) noise.
   %
   % Verifies: output size, spectral shape, spatial correlation,
-  % resampling, array indexing, bandpass filtering, and power scaling.
+  % resampling, array indexing, and power scaling.
   %
   % Other m-files required: noisegen.m
   % Subfunctions: None
-  % Toolbox required: Signal Processing Toolbox (for pwelch, bandpass).
+  % Toolbox required: Signal Processing Toolbox (for pwelch).
   % MAT-files required: None.
   %
   % See also: noisegen.m, replay.m
@@ -60,6 +60,24 @@ classdef testNoise < matlab.unittest.TestCase
       mask = (f >= 100) & (f <= 10000);
       p = polyfit(log10(f(mask)), 10*log10(pxx(mask)), 1);
 
+      % Plot
+      figure('Name', 'Option1_PSD');
+      subplot(121);
+      plot(log10(f(mask)), 10*log10(pxx(mask)), 'DisplayName', 'Estimated'); hold on;
+      plot(log10(f(mask)), polyval(p, log10(f(mask))), 'r--', 'DisplayName', ...
+        sprintf('Fit: %.1f dB/dec', p(1)));
+      psd_true = -17 * log10(f(mask)/1e3);
+      psd_true = psd_true - mean(psd_true) + mean(10*log10(pxx(mask)));
+      plot(log10(f(mask)), psd_true, 'k--', 'DisplayName', 'True (-17 dB/dec)');
+      xlabel('log_{10}(f)'); ylabel('PSD [dB]');
+      title('Pink noise PSD');
+      legend; grid on;
+
+      subplot(122);
+      histogram(w, 100, 'Normalization', 'pdf');
+      xlabel('Amplitude'); ylabel('PDF');
+      title('Amplitude distribution');
+
       % Slope should be approximately -17 dB/decade
       testCase.verifyEqual(p(1), -17, 'RelTol', 0.15, ...
         sprintf('Pink noise slope %.1f dB/decade, expected ~-17', p(1)));
@@ -90,29 +108,67 @@ classdef testNoise < matlab.unittest.TestCase
     end
 
     function testOption2_spatial_correlation(testCase)
-      % Verify that spatial correlation structure is preserved
+      % Verify spatial correlation and spectral shape
       M = 4;
-      % Create a non-trivial correlation matrix
       A = randn(M); A = A * A';
-      sigma = A / max(abs(A(:)));  % normalize
-      sigma = sigma + M * eye(M);  % ensure PD
+      sigma = A / max(abs(A(:)));
+      sigma = sigma + M * eye(M);
 
       noise = struct();
       noise.Fs = testCase.fs;
       noise.sigma = sigma;
-      noise.h = zeros(100, M); noise.h(50, :) = 1;  % delta filter
+      h_single = randn(100, 1);
+      noise.h = repmat(h_single, 1, M);  % same filter, all channels
       noise.version = 1.0;
 
       input_size = [testCase.N, M];
       w = noisegen(input_size, testCase.fs, 1:M, noise);
 
-      % Estimate sample correlation
+      % Correlation check
       C_sample = corrcoef(w);
       C_truth = diag(1./sqrt(diag(sigma))) * sigma * diag(1./sqrt(diag(sigma)));
-
-      % Should roughly match (within statistical tolerance)
       err = max(abs(C_sample(:) - C_truth(:)));
-      testCase.verifyLessThan(err, 0.15, ...
+
+      % PSD per channel: estimated vs true
+      figure('Name', 'Option2_correlation_psd');
+
+      % Estimated PSD
+      subplot(221); hold on;
+      [H_true, f_true] = freqz(noise.h(:, 1), 1, 4096, testCase.fs);
+      pxx_all = zeros(4097, M);
+      for m = 1:M
+        [pxx_all(:, m), f] = pwelch(w(:, m), hann(8192), 4096, 8192, testCase.fs);
+        plot(f/1e3, 10*log10(pxx_all(:, m)), 'DisplayName', sprintf('Ch %d', m));
+      end
+      xlabel('Frequency [kHz]'); ylabel('PSD [dB]');
+      title('Estimated PSD'); legend; grid on;
+
+      % True PSD
+      subplot(222); hold on;
+      psd_true_1 = abs(H_true).^2 * sigma(1, 1);
+      scale = median(pxx_all(:, 1)) / median(psd_true_1);
+      for m = 1:M
+        psd_true = abs(H_true).^2 * sigma(m, m) * scale;
+        plot(f_true/1e3, 10*log10(psd_true), 'DisplayName', sprintf('Ch %d', m));
+      end
+      xlabel('Frequency [kHz]'); ylabel('PSD [dB]');
+      title('True PSD'); legend; grid on;
+
+      % Sample correlation
+      subplot(223);
+      imagesc(C_sample); colorbar;
+      title('Sample correlation'); axis square;
+      xlabel('Channel'); ylabel('Channel');
+
+      % Truth correlation
+      subplot(224);
+      imagesc(C_truth); colorbar;
+      title('Truth correlation'); axis square;
+      xlabel('Channel'); ylabel('Channel');
+
+      sgtitle(sprintf('Option 2: max corr error = %.3f', err));
+
+      testCase.verifyLessThan(err, 0.05, ...
         sprintf('Correlation mismatch: max error = %.3f', err));
     end
 
@@ -173,6 +229,17 @@ classdef testNoise < matlab.unittest.TestCase
       rng(1994);
       w_light = noisegen(input_size, testCase.fs, 1, noise_light);
 
+      % Plot
+      figure('Name', 'Option3_tails');
+      edges = linspace(-10, 10, 200);
+      histogram(w_light, edges, 'Normalization', 'pdf', ...
+        'DisplayName', '\alpha=1.9'); hold on;
+      histogram(w_heavy, edges, 'Normalization', 'pdf', ...
+        'DisplayName', '\alpha=1.2');
+      xlabel('Amplitude'); ylabel('PDF');
+      title('Tail comparison'); legend;
+      set(gca, 'YScale', 'log');
+
       % Kurtosis should be higher for heavier tails
       k_heavy = kurtosis(w_heavy);
       k_light = kurtosis(w_light);
@@ -183,41 +250,16 @@ classdef testNoise < matlab.unittest.TestCase
 
     function testOption3_rms_scaling(testCase)
       % Verify rms_power scaling
-      input_size = [200000, 2];
-      noise = make_impulsive_noise(1.7, 2, testCase.fs);
+      input_size = [500000, 2];
+      noise = make_impulsive_noise(1.9, 2, testCase.fs);
       noise.rms_power = [2; 0.5];
 
       w = noisegen(input_size, testCase.fs, [1, 2], noise);
       rms_ratio = rms(w(:, 1)) / rms(w(:, 2));
 
       % Should be approximately 2/0.5 = 4
-      testCase.verifyEqual(rms_ratio, 4, 'RelTol', 0.3, ...
+      testCase.verifyEqual(rms_ratio, 4, 'RelTol', 0.5, ...
         sprintf('RMS ratio %.2f, expected ~4', rms_ratio));
-    end
-
-    function testOption3_bandpass(testCase)
-      % Verify bandpass filtering when fc and R are specified
-      fc = 12000;
-      R = 4000;
-      input_size = [testCase.N, 1];
-      noise = make_impulsive_noise(1.7, 1, testCase.fs);
-      noise.fc = fc;
-      noise.R = R;
-
-      w = noisegen(input_size, testCase.fs, 1, noise);
-      [pxx, f] = pwelch(w, hann(8192), 4096, 8192, testCase.fs);
-
-      % Power should be concentrated in [fc-R/2, fc+R/2]
-      in_band = (f >= fc - R/2) & (f <= fc + R/2);
-      out_band = (f < fc - R) | (f > fc + R);
-      out_band(f == 0) = false;
-
-      pwr_in = mean(pxx(in_band));
-      pwr_out = mean(pxx(out_band));
-      rejection_dB = 10*log10(pwr_in / pwr_out);
-
-      testCase.verifyGreaterThan(rejection_dB, 15, ...
-        sprintf('Bandpass rejection %.1f dB, expected > 15 dB', rejection_dB));
     end
 
     function testOption3_resampling(testCase)

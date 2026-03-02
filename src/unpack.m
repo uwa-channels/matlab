@@ -60,7 +60,6 @@ K = size(h_hat, 1);
 M = size(h_hat, 2);
 T = size(h_hat, 3);
 
-%% Build cumulative phase and delay-driving phase separately
 N_phi = ceil(T * fs_delay / fs_time);
 phase_all = zeros(length(array_index), N_phi);
 phase_drift = zeros(length(array_index), N_phi);

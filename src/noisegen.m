@@ -45,23 +45,23 @@ function w = noisegen(input_size, fs, varargin)
 
 
 if nargin ~= 2
-    array_index = varargin{1};
-    noise = varargin{2};
-    validate_inputs(input_size, noise, array_index);
+  array_index = varargin{1};
+  noise = varargin{2};
+  validate_inputs(input_size, noise, array_index);
 end
 
 
 if nargin == 2
-    w = noise_option_1(input_size, fs);
+  w = noise_option_1(input_size, fs);
 elseif nargin == 4
-    if ~isfield(noise, 'alpha')
-        w = noise_option_2(input_size, fs, noise, array_index);
+  if ~isfield(noise, 'alpha')
+    w = noise_option_2(input_size, fs, noise, array_index);
+  else
+    if ~isfield(noise, 'rms_power')
+      s = 1;
     else
-      if ~isfield(noise, 'rms_power')
-          s = 1;
-      else
-        s = noise.rms_power(:).';
-      end
+      s = noise.rms_power(:).';
+    end
 
     w = noise_option_3(input_size, fs, noise, array_index) .* s ;
 
@@ -79,21 +79,21 @@ end
 function validate_inputs(input_size, noise, array_index)
 % Noise version checking
 assert(noise.version >= 1.0, ...
-    'The minimum version of the noise matrix is 1.0, and you have %.1f.', ...
-    noise.version);
+  'The minimum version of the noise matrix is 1.0, and you have %.1f.', ...
+  noise.version);
 
 if isfield(noise, 'alpha')
-    M = size(noise.beta, 1);
+  M = size(noise.beta, 1);
 else
-    M = size(noise.sigma, 1);
+  M = size(noise.sigma, 1);
 end
 
 assert(length(unique(array_index)) == length(array_index));
 assert(input_size(2) <= M, 'The number of signal channels, %d, should be less than %d.', ...
-    input_size(2), M)
+  input_size(2), M)
 assert(max(array_index) <= M, ...
-    'The largest receive channel array_index, %d, should be less than %d.', ...
-    max(array_index), M);
+  'The largest receive channel array_index, %d, should be less than %d.', ...
+  max(array_index), M);
 end
 
 
@@ -111,7 +111,7 @@ H = sqrt([H_oneside, flip(H_oneside(2:end))]);
 h = fftshift(ifft(H));
 w = randn(input_size);
 for m = 1:input_size(2)
-    w(:, m) = conv(w(:, m), h, 'same');
+  w(:, m) = conv(w(:, m), h, 'same');
 end
 end
 
@@ -124,7 +124,7 @@ signal_size(1) = ceil(signal_size(1)*q/p);
 n = randn(signal_size(1), size(noise.sigma, 1)) * chol(noise.sigma);
 w = zeros(signal_size);
 for m = 1:signal_size(2)
-    w(:, m) = conv(n(:, array_index(m)), noise.h(:, array_index(m)), 'same');
+  w(:, m) = conv(n(:, array_index(m)), noise.h(:, array_index(m)), 'same');
 end
 w = resample(w, p, q, 'Dimension', 1);
 w = w(1:input_size(1), :);
@@ -147,11 +147,11 @@ N = size(beta, 1);
 z = stabrnd(alpha, 0, 1, 0, K+size(beta, 3), N);
 w = zeros(K, N);
 for i = 1:N
-    for j = 1:N
-        for k = 1:size(beta, 3)
-            w(:, i) = w(:, i) + beta(i, j, k) .* z(k:k+K-1, j);
-        end
+  for j = 1:N
+    for k = 1:size(beta, 3)
+      w(:, i) = w(:, i) + beta(i, j, k) .* z(k:k+K-1, j);
     end
+  end
 end
 w = resample(w(:, array_index), p, q, 'Dimension', 1);
 w = w(1:input_size(1), :);

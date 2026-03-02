@@ -256,21 +256,44 @@ classdef testUnpack < matlab.unittest.TestCase
       delay_axis = (0:size(unpacked, 1)-1) ./ p.fs_delay;
       time_axis = (0:size(unpacked, 3)-1) ./ fs_time_out;
 
-      figure('Name', p.label);
-      subplot(121);
+      figure('Name', p.label, 'Position', [100 100 1200 600]);
+
+      % --- Unpacked channel ---
+      subplot(131);
       imagesc(delay_axis*1e3, time_axis, ...
         20*log10(squeeze(abs(unpacked(:, 1, :))).'), [-30, 0]);
       xlabel('Delay [ms]'); ylabel('Time [s]');
-      title(sprintf('Unpacked: %s', p.label), 'Interpreter', 'none');
+      title('Unpacked');
       colorbar;
 
-      % Reference: what the full channel should look like
-      subplot(122);
+      % --- h_hat (input) ---
+      subplot(132);
       imagesc(delay_axis(1:L)*1e3, t_snapshots, ...
         20*log10(squeeze(abs(h_hat(:, 1, :))).'), [-30, 0]);
       xlabel('Delay [ms]'); ylabel('Time [s]');
       title('h_{hat} (input)');
       colorbar;
+
+      % --- Speed from phase ---
+      subplot(133);
+      if strcmp(p.tracking, 'theta')
+        phi_plot = channel.theta_hat;
+      elseif strcmp(p.tracking, 'phi')
+        phi_plot = channel.phi_hat;
+      else
+        phi_plot = zeros(1, N_delay);
+      end
+      if p.has_f_resamp
+        phi_plot = phi_plot + (1/f_resamp - 1) * 2*pi*p.fc ...
+          * (1:size(phi_plot, 2)) / p.fs_delay;
+      end
+      dphi = diff(phi_plot(1, :));
+      v_inst = -dphi / (1/p.fs_delay * 2 * pi * p.fc) * c;
+      t_speed = (0:length(v_inst)-1) / p.fs_delay;
+      plot(t_speed, v_inst);
+      xlabel('Time [s]'); ylabel('Speed [m/s]');
+      title('Speed (from \phi)');
+      grid on;
 
       sgtitle(p.label, 'Interpreter', 'none');
     end
