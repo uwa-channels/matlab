@@ -39,9 +39,9 @@ input = [zeros(round(fs/10), 1); passband; zeros(round(fs/10), 1);];
 %% Replay and generate noise
 y = replay(input, fs, array_index, channel);
 if textbook_noise
-    w = noisegen(size(y), fs);
+  w = noisegen(size(y), fs);
 else
-    w = noisegen(size(y), fs, array_index, noise);
+  w = noisegen(size(y), fs, array_index, noise);
 end
 
 %% Add the noise
@@ -51,9 +51,9 @@ r = y + 0.05 * w;
 figure, hold on
 legends = cell(length(array_index), 1);
 for m = 1:length(array_index)
-    v = r(:, m) .* exp(-2j*pi*fc*(0:size(r, 1) - 1).'./fs);
-    plot(abs(xcorr(v, resample(data_symbol(1:128), fs/R, 1))));
-    legends{m} = sprintf('Receiver %d', array_index(m));
+  v = r(:, m) .* exp(-2j*pi*fc*(0:size(r, 1) - 1).'./fs);
+  plot(abs(xcorr(v, resample(data_symbol(1:128), fs/R, 1))));
+  legends{m} = sprintf('Receiver %d', array_index(m));
 end
 xlabel('Samples'), ylabel('Xcorr'), legend(legends)
 
