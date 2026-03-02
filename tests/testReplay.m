@@ -14,7 +14,7 @@ classdef testReplay < matlab.unittest.TestCase
   %
   % See also: replay.m, est.m
   %
-  % Author: Zhengnan Li
+  % Author: Zhengnan Li, Claude (Opus 4.6)
   % Email : uwa-channels@ofdm.link
   %
   % License: MIT
@@ -263,7 +263,7 @@ classdef testReplay < matlab.unittest.TestCase
       t_replay_start = (start - 1) / p.fs_delay;
       t_replay_end = (start + T_baseband + L) / p.fs_delay;
 
-      figure('Name', p.label, 'Position', [100 100 1200 800]);
+      figure('Name', p.label);
 
       % --- h_hat waterfall ---
       subplot(221);
@@ -291,17 +291,18 @@ classdef testReplay < matlab.unittest.TestCase
       xline(t_replay_start, 'r--', 'LineWidth', 1.5);
       xline(t_replay_end, 'r--', 'LineWidth', 1.5);
 
-      % --- Ground truth ---
-      h1 = subplot(223);
-      stem(path_delay_0*1e3, path_gain);
-      ylabel('Path gain'); xlabel('Delay [ms]');
-      title('Ground truth');
-
-      % --- Cross-correlation ---
-      h2 = subplot(224); hold on;
+      % --- Ground truth + Cross-correlation (merged) ---
+      subplot(2, 1, 2); hold on;
+      colors = lines(p.M);
       max_xcor = 0;
       sync_idx = zeros(1, p.M);
       criteria = false(1, p.M);
+
+      % Plot ground truth stems first
+      for m = 1:p.M
+        stem(path_delay_0(:, m)*1e3, path_gain(:, m), ...
+          'Color', colors(m, :), 'MarkerSize', 6);
+      end
 
       for m = 1:p.M
         v_m = r(:, m) .* exp(-2j*pi*p.fc * (0:size(r,1)-1).'/fs);
@@ -338,8 +339,9 @@ classdef testReplay < matlab.unittest.TestCase
           'MinPeakDistance', min_sep);
 
         xaxis = lags_win / fs * 1e3;
-        plot(xaxis, xcor_win);
-        plot(xaxis(locs), xcor_win(locs), 'x', 'MarkerSize', 10);
+        plot(xaxis, xcor_win, '--', 'Color', colors(m, :));
+        plot(xaxis(locs), xcor_win(locs), 'x', ...
+          'Color', colors(m, :), 'MarkerSize', 10);
 
         % Weighted mean delay comparison
         n_found = length(locs);
@@ -358,10 +360,9 @@ classdef testReplay < matlab.unittest.TestCase
         end
       end
 
-      xlabel('Delay [ms]'); ylabel('|Xcorr|');
-      linkaxes([h1, h2], 'x');
-      xlim(h1, [-0.2*p.Tmp*1e3, 1.5*p.Tmp*1e3]);
-      title('Cross-correlation');
+      xlabel('Delay [ms]'); ylabel('Path gain / |Xcorr|');
+      xlim([-0.2*p.Tmp*1e3, 1.5*p.Tmp*1e3]);
+      title('Ground truth + Cross-correlation');
 
       if all(criteria)
         result = 'PASSED';

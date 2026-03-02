@@ -16,7 +16,7 @@ classdef testNoise < matlab.unittest.TestCase
   %
   % See also: noisegen.m, replay.m
   %
-  % Author: Zhengnan Li
+  % Author: Zhengnan Li, Claude (Opus 4.6)
   % Email : uwa-channels@ofdm.link
   %
   % License: MIT

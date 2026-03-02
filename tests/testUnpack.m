@@ -17,7 +17,7 @@ classdef testUnpack < matlab.unittest.TestCase
   %
   % See also: unpack.m, replay.m
   %
-  % Author: Zhengnan Li
+  % Author: Zhengnan Li, Claude (Opus 4.6)
   % Email : uwa-channels@ofdm.link
   %
   % License: MIT
