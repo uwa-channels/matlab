@@ -124,6 +124,11 @@ function w = noise_mixing(input_size, fs, noise, array_index)
 % Generate noise via mixing coefficients.
 %   alpha == 2: Gaussian (stabrnd Box-Muller path).
 %   alpha <  2: Symmetric alpha-stable (impulsive).
+%
+% The mixing w(n,i) = sum_j sum_k beta(i,j,k) * z(n+k-1, j)
+% is computed as cross-correlation in the frequency domain:
+%   W_i(f) = sum_j Z_j(f) .* conj(B_{ij}(f))
+%   w(:,i) = ifft(W_i)
 alpha = noise.alpha;
 beta = noise.beta;
 Fs = noise.Fs;
@@ -133,18 +138,31 @@ signal_size = input_size;
 signal_size(1) = ceil(signal_size(1)*q/p);
 
 K = signal_size(1);
-N = size(beta, 1);
+M = size(beta, 1);
+K_mix = size(beta, 3);
 
-z = stabrnd(alpha, 0, 1, 0, K+size(beta, 3), N);
-w = zeros(K, N);
-for i = 1:N
-  for j = 1:N
-    for k = 1:size(beta, 3)
-      w(:, i) = w(:, i) + beta(i, j, k) .* z(k:k+K-1, j);
-    end
-  end
+z = stabrnd(alpha, 0, 1, 0, K+K_mix, M);
+
+% FFT length (next power of 2 for speed)
+nfft = 2^nextpow2(K + K_mix);
+
+% Forward FFT of innovation channels (M transforms, reused for all i)
+Z = fft(z(1:K+K_mix, :), nfft, 1);  % nfft x M
+
+% FFT of beta taps per (i,j) pair
+B = fft(beta, nfft, 3);  % M x M x nfft
+
+% Only compute requested output channels
+w = zeros(K, length(array_index));
+for idx = 1:length(array_index)
+  i = array_index(idx);
+  Bi = reshape(B(i, :, :), M, nfft);  % M x nfft
+  W_i = sum(Z .* conj(Bi.'), 2);      % nfft x 1
+  w_full = real(ifft(W_i));
+  w(:, idx) = w_full(1:K);
 end
-w = resample(w(:, array_index), p, q, 'Dimension', 1);
+
+w = resample(w, p, q, 'Dimension', 1);
 w = w(1:input_size(1), :);
 end
 

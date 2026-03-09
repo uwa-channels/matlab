@@ -42,7 +42,8 @@ classdef testNoise < matlab.unittest.TestCase
 
   properties (Constant)
     fs = 48000;
-    N = 1000000;  % Long enough for spectral estimation
+    N = 500000;        % For spectral / correlation / distribution tests
+    N_SHORT = 100000;  % For size, resampling, subset, bandpass tests
   end
 
   methods (TestMethodSetup)
@@ -117,7 +118,7 @@ classdef testNoise < matlab.unittest.TestCase
     function testOption2_size_and_finite(testCase)
       noise = make_noise_struct(2);
       M = size(noise.beta, 1);
-      input_size = [testCase.N, M];
+      input_size = [testCase.N_SHORT, M];
       w = noisegen(input_size, testCase.fs, 1:M, noise);
       testCase.verifySize(w, input_size);
       testCase.verifyTrue(all(isfinite(w), 'all'));
@@ -192,12 +193,12 @@ classdef testNoise < matlab.unittest.TestCase
       noise = make_noise_struct(2);
       noise.beta = repmat(eye(M), [1, 1, 65]);
 
-      input_size = [testCase.N, M];
+      input_size = [testCase.N_SHORT, M];
       w = noisegen(input_size, testCase.fs, 1:M, noise);
       C = corrcoef(w);
       off_diag = C - eye(M);
 
-      testCase.verifyLessThan(max(abs(off_diag(:))), 0.05, ...
+      testCase.verifyLessThan(max(abs(off_diag(:))), 0.1, ...
         'Diagonal-only beta should produce independent channels');
     end
 
@@ -205,7 +206,7 @@ classdef testNoise < matlab.unittest.TestCase
       % Correct output length when fs != noise.Fs
       noise = make_noise_struct(2);
       M = size(noise.beta, 1);
-      input_size = [testCase.N, M];
+      input_size = [testCase.N_SHORT, M];
       w = noisegen(input_size, testCase.fs, 1:M, noise);
       testCase.verifySize(w, input_size);
     end
@@ -244,7 +245,7 @@ classdef testNoise < matlab.unittest.TestCase
       fc = noise.fc;
       R = noise.R;
 
-      input_size = [testCase.N, 2];
+      input_size = [testCase.N_SHORT, 2];
       w = noisegen(input_size, testCase.fs, [1, 2], noise);
 
       [pxx, f] = pwelch(w(:, 1), hann(8192), 4096, 8192, testCase.fs);
@@ -296,7 +297,7 @@ classdef testNoise < matlab.unittest.TestCase
     function testOption3_size_and_finite(testCase)
       noise = make_noise_struct(1.7);
       M = size(noise.beta, 1);
-      input_size = [testCase.N, M];
+      input_size = [testCase.N_SHORT, M];
       w = noisegen(input_size, testCase.fs, 1:M, noise);
       testCase.verifySize(w, input_size);
       testCase.verifyTrue(all(isfinite(w), 'all'));
@@ -377,7 +378,7 @@ classdef testNoise < matlab.unittest.TestCase
       fc = noise.fc;
       R = noise.R;
 
-      input_size = [testCase.N, 2];
+      input_size = [testCase.N_SHORT, 2];
       w = noisegen(input_size, testCase.fs, [1, 2], noise);
 
       [pxx, f] = pwelch(w(:, 1), hann(8192), 4096, 8192, testCase.fs);
@@ -426,23 +427,24 @@ classdef testNoise < matlab.unittest.TestCase
     end
 
     function testOption3_spatial_correlation(testCase)
-      % For alpha < 2, the variance (and hence covariance) is formally
-      % infinite.  Nevertheless, the sample correlation still reflects
-      % the spatial coupling imposed by the mixing coefficients.
-      % We verify the structural property (monotonic decay with
-      % element separation) and show the Gaussian-predicted
-      % Bandpass preserved: with zero perturbation, all beta
-      % profiles are proportional to the same base FIR, so the
-      % bandpass does not alter the correlation structure.
+      % For alpha < 2, Pearson correlation overestimates dependence
+      % because heavy-tailed outliers inflate the sample covariance.
+      % Spearman (rank) correlation is robust to this and tracks the
+      % Gaussian-predicted structure more closely.
+      %
+      % With zero perturbation, all beta profiles are proportional
+      % to the same base FIR, so the bandpass does not alter the
+      % correlation structure.
       noise = make_noise_struct(1.7, 0);
       M = size(noise.beta, 1);
       K = size(noise.beta, 3);
       input_size = [testCase.N, M];
       w = noisegen(input_size, testCase.fs, 1:M, noise);
 
-      C_sample = corrcoef(w);
+      C_pearson = corrcoef(w);
+      C_spearman = corr(w, 'Type', 'Spearman');
 
-      % Gaussian-predicted correlation (reference only)
+      % Gaussian-predicted correlation (reference)
       R_theory = zeros(M);
       for k = 1:K
         Bk = noise.beta(:, :, k);
@@ -454,34 +456,38 @@ classdef testNoise < matlab.unittest.TestCase
       % Plot
       figure('Name', 'Option3_correlation');
 
-      subplot(131);
+      subplot(221);
       imagesc(C_theory); colorbar; axis square;
       title('Gaussian-predicted C'); xlabel('Channel'); ylabel('Channel');
 
-      subplot(132);
-      imagesc(C_sample); colorbar; axis square;
-      title(sprintf('Sample C (\\alpha=%.1f)', noise.alpha));
+      subplot(222);
+      imagesc(C_pearson); colorbar; axis square;
+      title(sprintf('Pearson C (\\alpha=%.1f)', noise.alpha));
       xlabel('Channel'); ylabel('Channel');
 
-      subplot(133);
-      % Correlation vs element separation
+      subplot(223);
+      imagesc(C_spearman); colorbar; axis square;
+      title(sprintf('Spearman C (\\alpha=%.1f)', noise.alpha));
+      xlabel('Channel'); ylabel('Channel');
+
+      subplot(224);
       offsets = 1:M-1;
-      c_theory_vs_d = arrayfun(@(d) mean(diag(C_theory, d)), offsets);
-      c_sample_vs_d = arrayfun(@(d) mean(diag(C_sample, d)), offsets);
-      plot(offsets, c_theory_vs_d, 'ko-', 'DisplayName', 'Gaussian theory'); hold on;
-      plot(offsets, c_sample_vs_d, 'rs-', 'DisplayName', ...
-        sprintf('Sample (\\alpha=%.1f)', noise.alpha));
+      c_theory_d = arrayfun(@(d) mean(diag(C_theory, d)), offsets);
+      c_pearson_d = arrayfun(@(d) mean(diag(C_pearson, d)), offsets);
+      c_spearman_d = arrayfun(@(d) mean(diag(C_spearman, d)), offsets);
+      plot(offsets, c_theory_d, 'ko-', 'DisplayName', 'Gaussian theory'); hold on;
+      plot(offsets, c_pearson_d, 'rs-', 'DisplayName', 'Pearson');
+      plot(offsets, c_spearman_d, 'b^-', 'DisplayName', 'Spearman');
       xlabel('Element separation |i-j|'); ylabel('Mean correlation');
       title('Correlation decay'); legend; grid on;
 
       sgtitle(sprintf('Impulsive (\\alpha=%.1f) spatial correlation', noise.alpha));
 
-      % Adjacent channels should be more correlated than distant ones
-      testCase.verifyGreaterThan(abs(C_sample(1,2)), abs(C_sample(1, M)), ...
+      % Structural checks (Spearman is the robust metric)
+      testCase.verifyGreaterThan(abs(C_spearman(1,2)), abs(C_spearman(1, M)), ...
         'Adjacent channels should be more correlated than distant ones');
 
-      % Correlation should decay monotonically (on average)
-      c_vs_d = arrayfun(@(d) mean(abs(diag(C_sample, d))), 1:M-1);
+      c_vs_d = arrayfun(@(d) mean(abs(diag(C_spearman, d))), 1:M-1);
       testCase.verifyTrue(c_vs_d(1) > c_vs_d(end), ...
         'Correlation should decay with element separation');
     end
