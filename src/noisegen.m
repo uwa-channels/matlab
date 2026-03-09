@@ -4,14 +4,26 @@ function w = noisegen(input_size, fs, varargin)
 % W = NOISEGEN(INPUT_SIZE, FS) generates independent pink Gaussian
 % noise with 17 dB / decade power spectrum, W. INPUT_SIZE specifies the
 % size of the input signal, and FS is the sampling rate of the input signal.
-% The noise is assumed to be sptailly independent.
+% The noise is assumed to be spatially independent.
 %
 % W = NOISEGEN(INPUT_SIZE, FS, ARRAY_INDEX, NOISE) generates acoustic
-% noise. Based on the input of the NOISE struct, it can generate colored
-% and spatially-correlated Gaussian noise or impulsive noise. NOISE is a
-% struct containing noise statistics, and ARRAY_INDEX specifies the
-% indices of the receiver elements through which the user would like to
-% generate noise. These indices must match those used in the REPLAY function.
+% noise using the mixing-coefficient method. The noise struct determines
+% the distribution:
+%   alpha == 2  => Gaussian (stabrnd reduces to Box-Muller).
+%   alpha <  2  => Symmetric alpha-stable (impulsive).
+%
+% The NOISE struct contains the following fields:
+%   Fs        - Sampling rate at which noise statistics were measured [Hz].
+%   R         - Signal bandwidth [Hz].
+%   alpha     - Stability index of the S-alpha-S distribution (2 = Gaussian).
+%   beta      - Mixing coefficients, size [M x M x K].
+%   fc        - Center frequency [Hz].
+%   rms_power - Per-channel RMS power scaling, size [M x 1].
+%   version   - Noise struct version (>= 1.0).
+%
+% ARRAY_INDEX specifies the indices of the receiver elements through which
+% the user would like to generate noise. These indices must match those
+% used in the REPLAY function.
 %
 % Inputs:
 %    input_size              - Input signal matrix size.
@@ -27,8 +39,8 @@ function w = noisegen(input_size, fs, varargin)
 %
 %
 % Other m-files required: None
-% Subfunctions: validate_inputs, noise_option_1, noise_option_2, noise_option_3
-% Toolbox required: Signal Processing Toolbox (R) (resample function).
+% Subfunctions: validate_inputs, noise_pink, noise_mixing, stabrnd
+% Toolbox required: Signal Processing Toolbox (R) (resample, bandpass).
 % MAT-files optional: noise matfile.
 %
 % See also: replay.m
@@ -39,8 +51,10 @@ function w = noisegen(input_size, fs, varargin)
 % License: MIT
 %
 % Revision history:
-%   - Apr. 1, 2025: initial release.
-%
+%   - Apr. 1, 2025: Initial release.
+%   - Mar. 9, 2026: Unified noise struct (alpha, beta, Fs, R, fc,
+%                    rms_power, version). Removed Cholesky (sigma/h)
+%                    path in favor of mixing-coefficient method.
 %
 
 
@@ -52,41 +66,31 @@ end
 
 
 if nargin == 2
-  w = noise_option_1(input_size, fs);
+  w = noise_pink(input_size, fs);
 elseif nargin == 4
-  if ~isfield(noise, 'alpha')
-    w = noise_option_2(input_size, fs, noise, array_index);
-  else
-    if ~isfield(noise, 'rms_power')
-      s = 1;
-    else
-      s = noise.rms_power(:).';
-    end
+  %% Mixing-coefficient generation (Gaussian or impulsive)
+  w = noise_mixing(input_size, fs, noise, array_index);
 
-    w = noise_option_3(input_size, fs, noise, array_index) .* s ;
+  %% Per-channel RMS power scaling
+  w = w .* noise.rms_power(array_index).';
 
-    if isfield(noise, 'fc') && isfield(noise, 'R')
-      fl = noise.fc - noise.R/2*1.1;
-      fh = noise.fc + noise.R/2*1.1;
-      w = bandpass(w, [fl, fh], fs, "steepness", 0.9);
-    end
-  end
+  %% Bandpass filtering
+  fl = noise.fc - noise.R/2*1.1;
+  fh = noise.fc + noise.R/2*1.1;
+  w = bandpass(w, [fl, fh], fs, "steepness", 0.9);
 else
   error('Wrong noise option.');
 end
 end
 
+
 function validate_inputs(input_size, noise, array_index)
-% Noise version checking
+% Validate the noise struct and array indices.
 assert(noise.version >= 1.0, ...
   'The minimum version of the noise matrix is 1.0, and you have %.1f.', ...
   noise.version);
 
-if isfield(noise, 'alpha')
-  M = size(noise.beta, 1);
-else
-  M = size(noise.sigma, 1);
-end
+M = size(noise.beta, 1);
 
 assert(length(unique(array_index)) == length(array_index));
 assert(input_size(2) <= M, 'The number of signal channels, %d, should be less than %d.', ...
@@ -97,7 +101,7 @@ assert(max(array_index) <= M, ...
 end
 
 
-function w = noise_option_1(input_size, fs)
+function w = noise_pink(input_size, fs)
 % Generate textbook style noise: independent pink Gaussian noise (17dB/decade) across array elements.
 nfft = 4096;
 fmin = 0;
@@ -116,23 +120,10 @@ end
 end
 
 
-function w = noise_option_2(input_size, fs, noise, array_index)
-% Generate noise according to statistics collected during experiments.
-[p, q] = rat(fs/noise.Fs);
-signal_size = input_size;
-signal_size(1) = ceil(signal_size(1)*q/p);
-n = randn(signal_size(1), size(noise.sigma, 1)) * chol(noise.sigma);
-w = zeros(signal_size);
-for m = 1:signal_size(2)
-  w(:, m) = conv(n(:, array_index(m)), noise.h(:, array_index(m)), 'same');
-end
-w = resample(w, p, q, 'Dimension', 1);
-w = w(1:input_size(1), :);
-end
-
-
-function w = noise_option_3(input_size, fs, noise, array_index)
-% Generate impulsive noise.
+function w = noise_mixing(input_size, fs, noise, array_index)
+% Generate noise via mixing coefficients.
+%   alpha == 2: Gaussian (stabrnd Box-Muller path).
+%   alpha <  2: Symmetric alpha-stable (impulsive).
 alpha = noise.alpha;
 beta = noise.beta;
 Fs = noise.Fs;

@@ -3,15 +3,29 @@ classdef testNoise < matlab.unittest.TestCase
   %
   % Tests three noise generation modes:
   %   Option 1: Independent pink Gaussian noise (17 dB/decade).
-  %   Option 2: Colored, spatially-correlated Gaussian noise.
-  %   Option 3: Impulsive (alpha-stable) noise.
+  %             Invoked with nargin == 2.
+  %   Option 2: Colored, spatially-correlated Gaussian noise
+  %             (alpha = 2, beta mixing coefficients).
+  %   Option 3: Impulsive (alpha-stable) noise
+  %             (alpha < 2, beta mixing coefficients).
   %
-  % Verifies: output size, spectral shape, spatial correlation,
-  % resampling, array indexing, and power scaling.
+  % Options 2 and 3 share a unified noise struct with fields:
+  %   Fs, R, alpha, beta, fc, rms_power, version.
+  % The stability index alpha determines the distribution:
+  %   alpha == 2  => Gaussian (stabrnd reduces to Box-Muller).
+  %   alpha <  2  => Symmetric alpha-stable (impulsive).
+  % Bandpass filtering (fc +/- R/2*1.1) and rms_power scaling
+  % are always applied when the noise struct is provided.
+  %
+  % The synthetic noise struct is modeled on real experimental
+  % data (12-element ULA, 65 mixing taps, Fs=39062.5 Hz,
+  % fc=13 kHz, R~4.9 kHz).  The beta mixing matrix is
+  % constructed as a bandpass FIR with exponential spatial decay.
   %
   % Other m-files required: noisegen.m
   % Subfunctions: None
-  % Toolbox required: Signal Processing Toolbox (for pwelch).
+  % Toolbox required: Signal Processing Toolbox (for pwelch, bandpass,
+  %                   fir1).
   % MAT-files required: None.
   %
   % See also: noisegen.m, replay.m
@@ -23,6 +37,8 @@ classdef testNoise < matlab.unittest.TestCase
   %
   % Revision history:
   %   - Feb. 27, 2026: Initial release.
+  %   - Mar.  9, 2026: Unified noise struct. Synthetic beta modeled
+  %                     on real experimental data.
 
   properties (Constant)
     fs = 48000;
@@ -38,7 +54,7 @@ classdef testNoise < matlab.unittest.TestCase
   methods (Test)
 
     %% ============================================================
-    %  Option 1: Pink Gaussian noise
+    %  Option 1: Pink Gaussian noise (nargin == 2)
     % =============================================================
 
     function testOption1_size(testCase)
@@ -95,112 +111,193 @@ classdef testNoise < matlab.unittest.TestCase
     end
 
     %% ============================================================
-    %  Option 2: Colored spatially-correlated Gaussian noise
+    %  Option 2: Gaussian noise via beta mixing (alpha = 2)
     % =============================================================
 
     function testOption2_size_and_finite(testCase)
-      input_size = [testCase.N, 4];
-      array_index = 1:4;
-      noise = make_gaussian_noise(4, testCase.fs);
-      w = noisegen(input_size, testCase.fs, array_index, noise);
+      noise = make_noise_struct(2);
+      M = size(noise.beta, 1);
+      input_size = [testCase.N, M];
+      w = noisegen(input_size, testCase.fs, 1:M, noise);
       testCase.verifySize(w, input_size);
       testCase.verifyTrue(all(isfinite(w), 'all'));
     end
 
     function testOption2_spatial_correlation(testCase)
-      % Verify spatial correlation and spectral shape
-      M = 4;
-      A = randn(M); A = A * A';
-      sigma = A / max(abs(A(:)));
-      sigma = sigma + M * eye(M);
-
-      noise = struct();
-      noise.Fs = testCase.fs;
-      noise.sigma = sigma;
-      h_single = randn(100, 1);
-      noise.h = repmat(h_single, 1, M);  % same filter, all channels
-      noise.version = 1.0;
-
+      % Verify that the sample correlation matches the theoretical
+      % prediction from the mixing equation:
+      %   R_{ii'}(0) = sum_j sum_k beta(i,j,k) * beta(i',j,k)
+      % i.e. R(0) = sum_k B_k * B_k^T, then normalize to get C.
+      %
+      % Bandpass is removed here to isolate the mixing test;
+      % the bandpass filter modifies the cross-spectral density
+      % non-uniformly across channel pairs, which breaks the
+      % simple R = sum B_k B_k^T formula.  Bandpass correctness
+      % Bandpass filtering preserves the correlation structure
+      % only when all beta(i,j,:) profiles are proportional to
+      % the same base FIR.  Setting perturb=0 ensures this.
+      % Bandpass correctness is verified in testOption2_bandpass.
+      noise = make_noise_struct(2, 0);
+      M = size(noise.beta, 1);
+      K = size(noise.beta, 3);
       input_size = [testCase.N, M];
       w = noisegen(input_size, testCase.fs, 1:M, noise);
 
-      % Correlation check
+      % --- Theoretical correlation from beta ---
+      R_theory = zeros(M);
+      for k = 1:K
+        Bk = noise.beta(:, :, k);
+        R_theory = R_theory + Bk * Bk.';
+      end
+      d = sqrt(diag(R_theory));
+      C_theory = R_theory ./ (d * d.');
+
+      % --- Sample correlation ---
       C_sample = corrcoef(w);
-      C_truth = diag(1./sqrt(diag(sigma))) * sigma * diag(1./sqrt(diag(sigma)));
-      err = max(abs(C_sample(:) - C_truth(:)));
 
-      % PSD per channel: estimated vs true
-      figure('Name', 'Option2_correlation_psd');
+      % --- Plot ---
+      figure('Name', 'Option2_correlation');
 
-      % Estimated PSD
       subplot(221); hold on;
-      [H_true, f_true] = freqz(noise.h(:, 1), 1, 4096, testCase.fs);
-      pxx_all = zeros(4097, M);
       for m = 1:M
-        [pxx_all(:, m), f] = pwelch(w(:, m), hann(8192), 4096, 8192, testCase.fs);
-        plot(f/1e3, 10*log10(pxx_all(:, m)), 'DisplayName', sprintf('Ch %d', m));
+        [pxx, f] = pwelch(w(:, m), hann(8192), 4096, 8192, testCase.fs);
+        plot(f/1e3, 10*log10(pxx), 'DisplayName', sprintf('Ch %d', m));
       end
       xlabel('Frequency [kHz]'); ylabel('PSD [dB]');
-      title('Estimated PSD'); legend; grid on;
+      title('Estimated PSD'); legend('Location', 'best'); grid on;
 
-      % True PSD
-      subplot(222); hold on;
-      psd_true_1 = abs(H_true).^2 * sigma(1, 1);
-      scale = median(pxx_all(:, 1)) / median(psd_true_1);
-      for m = 1:M
-        psd_true = abs(H_true).^2 * sigma(m, m) * scale;
-        plot(f_true/1e3, 10*log10(psd_true), 'DisplayName', sprintf('Ch %d', m));
-      end
-      xlabel('Frequency [kHz]'); ylabel('PSD [dB]');
-      title('True PSD'); legend; grid on;
+      subplot(222);
+      imagesc(C_theory); colorbar; axis square;
+      title('Theoretical C'); xlabel('Channel'); ylabel('Channel');
 
-      % Sample correlation
       subplot(223);
-      imagesc(C_sample); colorbar;
-      title('Sample correlation'); axis square;
-      xlabel('Channel'); ylabel('Channel');
+      imagesc(C_sample); colorbar; axis square;
+      title('Sample C'); xlabel('Channel'); ylabel('Channel');
 
-      % Truth correlation
       subplot(224);
-      imagesc(C_truth); colorbar;
-      title('Truth correlation'); axis square;
-      xlabel('Channel'); ylabel('Channel');
+      imagesc(C_sample - C_theory); colorbar; axis square;
+      title('Error (sample - theory)'); xlabel('Channel'); ylabel('Channel');
 
-      sgtitle(sprintf('Option 2: max corr error = %.3f', err));
+      err = max(abs(C_sample(:) - C_theory(:)));
+      sgtitle(sprintf('Gaussian mixing: max |error| = %.4f', err));
 
+      % Max absolute error should be small
       testCase.verifyLessThan(err, 0.05, ...
-        sprintf('Correlation mismatch: max error = %.3f', err));
+        sprintf('Correlation mismatch: max |error| = %.4f', err));
+    end
+
+    function testOption2_identity_beta_independence(testCase)
+      % Identity mixing should yield independent channels
+      M = 12;
+      noise = make_noise_struct(2);
+      noise.beta = repmat(eye(M), [1, 1, 65]);
+
+      input_size = [testCase.N, M];
+      w = noisegen(input_size, testCase.fs, 1:M, noise);
+      C = corrcoef(w);
+      off_diag = C - eye(M);
+
+      testCase.verifyLessThan(max(abs(off_diag(:))), 0.05, ...
+        'Diagonal-only beta should produce independent channels');
     end
 
     function testOption2_resampling(testCase)
-      % Verify correct output length when fs != noise.Fs
-      noise_fs = 96000;
-      input_size = [testCase.N, 2];
-      noise = make_gaussian_noise(2, noise_fs);
-      w = noisegen(input_size, testCase.fs, [1, 2], noise);
+      % Correct output length when fs != noise.Fs
+      noise = make_noise_struct(2);
+      M = size(noise.beta, 1);
+      input_size = [testCase.N, M];
+      w = noisegen(input_size, testCase.fs, 1:M, noise);
       testCase.verifySize(w, input_size);
     end
 
     function testOption2_array_index_subset(testCase)
       % Using a subset of array indices
-      M_total = 6;
-      noise = make_gaussian_noise(M_total, testCase.fs);
-      array_index = [2, 4, 6];
+      noise = make_noise_struct(2);
+      array_index = [2, 6, 10];
       input_size = [100000, length(array_index)];
       w = noisegen(input_size, testCase.fs, array_index, noise);
       testCase.verifySize(w, input_size);
       testCase.verifyTrue(all(isfinite(w), 'all'));
     end
 
+    function testOption2_rms_scaling(testCase)
+      % Verify per-channel rms_power scaling.
+      % Use identity beta to avoid cross-channel leakage.
+      noise = make_noise_struct(2);
+      M = size(noise.beta, 1);
+      noise.beta = repmat(eye(M), [1, 1, 65]);
+      noise.rms_power = ones(M, 1);
+      noise.rms_power(1) = 3;
+      noise.rms_power(2) = 1;
+
+      input_size = [500000, 2];
+      w = noisegen(input_size, testCase.fs, [1, 2], noise);
+      rms_ratio = rms(w(:, 1)) / rms(w(:, 2));
+
+      testCase.verifyEqual(rms_ratio, 3, 'RelTol', 0.15, ...
+        sprintf('RMS ratio %.2f, expected ~3', rms_ratio));
+    end
+
+    function testOption2_bandpass(testCase)
+      % Verify bandpass filtering
+      noise = make_noise_struct(2);
+      fc = noise.fc;
+      R = noise.R;
+
+      input_size = [testCase.N, 2];
+      w = noisegen(input_size, testCase.fs, [1, 2], noise);
+
+      [pxx, f] = pwelch(w(:, 1), hann(8192), 4096, 8192, testCase.fs);
+      pxx_dB = 10*log10(pxx);
+
+      in_band = (f >= fc - R/2) & (f <= fc + R/2);
+      out_low = (f >= 100) & (f <= fc - R);
+      out_high = (f >= fc + R) & (f <= testCase.fs/2 - 100);
+
+      psd_in = mean(pxx_dB(in_band));
+      psd_out = mean(pxx_dB(out_low | out_high));
+
+      % Plot
+      figure('Name', 'Option2_bandpass');
+      plot(f/1e3, pxx_dB); hold on;
+      xline((fc - R/2)/1e3, 'r--'); xline((fc + R/2)/1e3, 'r--');
+      xlabel('Frequency [kHz]'); ylabel('PSD [dB]');
+      title(sprintf('Gaussian bandpass: fc=%.0f kHz, R=%.1f kHz', fc/1e3, R/1e3));
+      grid on;
+
+      testCase.verifyGreaterThan(psd_in - psd_out, 20, ...
+        sprintf('Bandpass rejection %.1f dB, expected > 20 dB', ...
+        psd_in - psd_out));
+    end
+
+    function testOption2_gaussianity(testCase)
+      % alpha=2 should produce Gaussian output (kurtosis ~ 3)
+      noise = make_noise_struct(2);
+      input_size = [testCase.N, 1];
+      w = noisegen(input_size, testCase.fs, 1, noise);
+
+      k = kurtosis(w);
+
+      figure('Name', 'Option2_gaussianity');
+      histogram(w, 200, 'Normalization', 'pdf'); hold on;
+      x = linspace(min(w), max(w), 500);
+      plot(x, normpdf(x, 0, std(w)), 'r', 'LineWidth', 1.5);
+      xlabel('Amplitude'); ylabel('PDF');
+      title(sprintf('Gaussianity check (kurtosis = %.2f)', k));
+
+      testCase.verifyEqual(k, 3, 'RelTol', 0.15, ...
+        sprintf('Kurtosis %.2f, expected ~3 for Gaussian', k));
+    end
+
     %% ============================================================
-    %  Option 3: Impulsive (alpha-stable) noise
+    %  Option 3: Impulsive (alpha-stable) noise (alpha < 2)
     % =============================================================
 
     function testOption3_size_and_finite(testCase)
-      input_size = [testCase.N, 3];
-      array_index = 1:3;
-      noise = make_impulsive_noise(1.7, 3, testCase.fs);
-      w = noisegen(input_size, testCase.fs, array_index, noise);
+      noise = make_noise_struct(1.7);
+      M = size(noise.beta, 1);
+      input_size = [testCase.N, M];
+      w = noisegen(input_size, testCase.fs, 1:M, noise);
       testCase.verifySize(w, input_size);
       testCase.verifyTrue(all(isfinite(w), 'all'));
     end
@@ -210,7 +307,7 @@ classdef testNoise < matlab.unittest.TestCase
       alphas = [1.2, 1.5, 1.7, 1.9];
       input_size = [100000, 2];
       for k = 1:length(alphas)
-        noise = make_impulsive_noise(alphas(k), 2, testCase.fs);
+        noise = make_noise_struct(alphas(k));
         w = noisegen(input_size, testCase.fs, [1, 2], noise);
         testCase.verifySize(w, input_size);
         testCase.verifyTrue(all(isfinite(w), 'all'), ...
@@ -219,10 +316,10 @@ classdef testNoise < matlab.unittest.TestCase
     end
 
     function testOption3_heavier_tail(testCase)
-      % Lower alpha should produce heavier tails (more outliers)
+      % Lower alpha should produce heavier tails (higher kurtosis)
       input_size = [500000, 1];
-      noise_heavy = make_impulsive_noise(1.2, 1, testCase.fs);
-      noise_light = make_impulsive_noise(1.9, 1, testCase.fs);
+      noise_heavy = make_noise_struct(1.2);
+      noise_light = make_noise_struct(1.9);
 
       rng(1994);
       w_heavy = noisegen(input_size, testCase.fs, 1, noise_heavy);
@@ -240,7 +337,6 @@ classdef testNoise < matlab.unittest.TestCase
       title('Tail comparison'); legend;
       set(gca, 'YScale', 'log');
 
-      % Kurtosis should be higher for heavier tails
       k_heavy = kurtosis(w_heavy);
       k_light = kurtosis(w_light);
       testCase.verifyGreaterThan(k_heavy, k_light, ...
@@ -249,27 +345,145 @@ classdef testNoise < matlab.unittest.TestCase
     end
 
     function testOption3_rms_scaling(testCase)
-      % Verify rms_power scaling
-      input_size = [500000, 2];
-      noise = make_impulsive_noise(1.9, 2, testCase.fs);
-      noise.rms_power = [2; 0.5];
+      % Verify rms_power scaling.
+      % Use identity beta to avoid cross-channel leakage.
+      noise = make_noise_struct(1.9);
+      M = size(noise.beta, 1);
+      noise.beta = repmat(eye(M), [1, 1, 65]);
+      noise.rms_power = ones(M, 1);
+      noise.rms_power(1) = 2;
+      noise.rms_power(2) = 0.5;
 
+      input_size = [500000, 2];
       w = noisegen(input_size, testCase.fs, [1, 2], noise);
       rms_ratio = rms(w(:, 1)) / rms(w(:, 2));
 
-      % Should be approximately 2/0.5 = 4
       testCase.verifyEqual(rms_ratio, 4, 'RelTol', 0.5, ...
         sprintf('RMS ratio %.2f, expected ~4', rms_ratio));
     end
 
     function testOption3_resampling(testCase)
-      % Verify correct output when noise.Fs != fs
-      noise_fs = 96000;
+      % Correct output when noise.Fs != fs
+      noise = make_noise_struct(1.7);
       input_size = [100000, 2];
-      noise = make_impulsive_noise(1.7, 2, noise_fs);
       w = noisegen(input_size, testCase.fs, [1, 2], noise);
       testCase.verifySize(w, input_size);
       testCase.verifyTrue(all(isfinite(w), 'all'));
+    end
+
+    function testOption3_bandpass(testCase)
+      % Verify bandpass filtering for impulsive noise
+      noise = make_noise_struct(1.7);
+      fc = noise.fc;
+      R = noise.R;
+
+      input_size = [testCase.N, 2];
+      w = noisegen(input_size, testCase.fs, [1, 2], noise);
+
+      [pxx, f] = pwelch(w(:, 1), hann(8192), 4096, 8192, testCase.fs);
+      pxx_dB = 10*log10(pxx);
+
+      in_band = (f >= fc - R/2) & (f <= fc + R/2);
+      out_low = (f >= 100) & (f <= fc - R);
+      out_high = (f >= fc + R) & (f <= testCase.fs/2 - 100);
+
+      psd_in = mean(pxx_dB(in_band));
+      psd_out = mean(pxx_dB(out_low | out_high));
+
+      % Plot
+      figure('Name', 'Option3_bandpass');
+      plot(f/1e3, pxx_dB); hold on;
+      xline((fc - R/2)/1e3, 'r--'); xline((fc + R/2)/1e3, 'r--');
+      xlabel('Frequency [kHz]'); ylabel('PSD [dB]');
+      title(sprintf('Impulsive bandpass: fc=%.0f kHz, R=%.1f kHz', ...
+        fc/1e3, R/1e3));
+      grid on;
+
+      testCase.verifyGreaterThan(psd_in - psd_out, 20, ...
+        sprintf('Bandpass rejection %.1f dB, expected > 20 dB', ...
+        psd_in - psd_out));
+    end
+
+    function testOption3_alpha2_matches_gaussian(testCase)
+      % alpha = 2 should look Gaussian-like (kurtosis ~ 3),
+      % while alpha = 1.5 should have heavier tails
+      input_size = [500000, 1];
+
+      rng(42);
+      noise_g = make_noise_struct(2);
+      w_g = noisegen(input_size, testCase.fs, 1, noise_g);
+
+      rng(42);
+      noise_i = make_noise_struct(1.5);
+      w_i = noisegen(input_size, testCase.fs, 1, noise_i);
+
+      k_g = kurtosis(w_g);
+      k_i = kurtosis(w_i);
+
+      testCase.verifyGreaterThan(k_i, k_g, ...
+        sprintf('alpha=1.5 kurtosis (%.1f) should exceed alpha=2 (%.1f)', ...
+        k_i, k_g));
+    end
+
+    function testOption3_spatial_correlation(testCase)
+      % For alpha < 2, the variance (and hence covariance) is formally
+      % infinite.  Nevertheless, the sample correlation still reflects
+      % the spatial coupling imposed by the mixing coefficients.
+      % We verify the structural property (monotonic decay with
+      % element separation) and show the Gaussian-predicted
+      % Bandpass preserved: with zero perturbation, all beta
+      % profiles are proportional to the same base FIR, so the
+      % bandpass does not alter the correlation structure.
+      noise = make_noise_struct(1.7, 0);
+      M = size(noise.beta, 1);
+      K = size(noise.beta, 3);
+      input_size = [testCase.N, M];
+      w = noisegen(input_size, testCase.fs, 1:M, noise);
+
+      C_sample = corrcoef(w);
+
+      % Gaussian-predicted correlation (reference only)
+      R_theory = zeros(M);
+      for k = 1:K
+        Bk = noise.beta(:, :, k);
+        R_theory = R_theory + Bk * Bk.';
+      end
+      d = sqrt(diag(R_theory));
+      C_theory = R_theory ./ (d * d.');
+
+      % Plot
+      figure('Name', 'Option3_correlation');
+
+      subplot(131);
+      imagesc(C_theory); colorbar; axis square;
+      title('Gaussian-predicted C'); xlabel('Channel'); ylabel('Channel');
+
+      subplot(132);
+      imagesc(C_sample); colorbar; axis square;
+      title(sprintf('Sample C (\\alpha=%.1f)', noise.alpha));
+      xlabel('Channel'); ylabel('Channel');
+
+      subplot(133);
+      % Correlation vs element separation
+      offsets = 1:M-1;
+      c_theory_vs_d = arrayfun(@(d) mean(diag(C_theory, d)), offsets);
+      c_sample_vs_d = arrayfun(@(d) mean(diag(C_sample, d)), offsets);
+      plot(offsets, c_theory_vs_d, 'ko-', 'DisplayName', 'Gaussian theory'); hold on;
+      plot(offsets, c_sample_vs_d, 'rs-', 'DisplayName', ...
+        sprintf('Sample (\\alpha=%.1f)', noise.alpha));
+      xlabel('Element separation |i-j|'); ylabel('Mean correlation');
+      title('Correlation decay'); legend; grid on;
+
+      sgtitle(sprintf('Impulsive (\\alpha=%.1f) spatial correlation', noise.alpha));
+
+      % Adjacent channels should be more correlated than distant ones
+      testCase.verifyGreaterThan(abs(C_sample(1,2)), abs(C_sample(1, M)), ...
+        'Adjacent channels should be more correlated than distant ones');
+
+      % Correlation should decay monotonically (on average)
+      c_vs_d = arrayfun(@(d) mean(abs(diag(C_sample, d))), 1:M-1);
+      testCase.verifyTrue(c_vs_d(1) > c_vs_d(end), ...
+        'Correlation should decay with element separation');
     end
 
   end
@@ -280,21 +494,71 @@ end
 %  Helper functions
 % =====================================================================
 
-function noise = make_gaussian_noise(M, Fs)
+function noise = make_noise_struct(alpha, perturb)
+% Construct a synthetic noise struct that mimics real experimental
+% data from a 12-element ULA.
+%
+% The beta mixing matrix is built as follows:
+%   1. Design a bandpass FIR (K=65 taps) at the channel center
+%      frequency.  This captures the spectral shaping observed
+%      in real measured mixing coefficients.
+%   2. Scale each (i,j) pair by 0.5^|i-j| to model the spatial
+%      correlation decay of a linear array.
+%   3. Add random perturbations scaled by PERTURB (default 0.05),
+%      as observed in real data.
+%
+% Parameters are modeled on a 12-element array with:
+%   Fs = 39062.5 Hz, fc = 13 kHz, R ~ 4.9 kHz.
+
+if nargin < 2
+  perturb = 0.05;
+end
+
+M = 12;           % Number of array elements
+K = 65;           % Number of mixing taps
+Fs = 39062.5;     % Noise sampling rate [Hz]
+fc = 13000;       % Center frequency [Hz]
+R = 4882.8125;    % Bandwidth [Hz]
+
+% --- Bandpass FIR as base tap profile ---
+% Normalized cutoff frequencies for fir1
+f_lo = (fc - R/2) / (Fs/2);
+f_hi = (fc + R/2) / (Fs/2);
+base_profile = fir1(K-1, [f_lo, f_hi]);
+base_profile = base_profile(:);
+
+% --- Build beta with spatial decay ---
+rng_state = rng;
+rng(2024);  % Deterministic for reproducibility
+
+decay_rate = 0.5;
+
+beta = zeros(M, M, K);
+for i = 1:M
+  for j = 1:M
+    d = abs(i - j);
+    scale = decay_rate^d;
+    perturbation = perturb * scale * randn(K, 1);
+    beta(i, j, :) = scale * base_profile + perturbation;
+  end
+end
+
+rng(rng_state);  % Restore RNG state
+
+% --- Per-channel RMS power ---
+% Mild variation across elements (ratio max/min ~ 1.3)
+rms_power = 3.2e-4 * (1 + 0.1 * linspace(-1, 1, M).');
+
 noise = struct();
 noise.Fs = Fs;
-noise.sigma = eye(M);
-noise.h = randn(100, M);
+noise.R = R;
+noise.alpha = alpha;
+noise.beta = beta;
+noise.fc = fc;
+noise.rms_power = rms_power;
 noise.version = 1.0;
 end
 
-function noise = make_impulsive_noise(alpha, M, Fs)
-noise = struct();
-noise.alpha = alpha;
-noise.Fs = Fs;
-noise.beta = repmat(eye(M), [1, 1, 65]);
-noise.version = 1.0;
-end
 
 function k = kurtosis(x)
 x = x(:);
@@ -302,4 +566,8 @@ mu = mean(x);
 m2 = mean((x - mu).^2);
 m4 = mean((x - mu).^4);
 k = m4 / m2^2;
+end
+
+function y = normpdf(x, mu, sigma)
+y = 1 / (sigma * sqrt(2*pi)) * exp(-0.5 * ((x - mu) / sigma).^2);
 end
