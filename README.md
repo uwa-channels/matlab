@@ -1,32 +1,41 @@
 [![CI](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml/badge.svg)](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/uwa-channels/matlab/graph/badge.svg?token=NQ1M28NGYM)](https://codecov.io/gh/uwa-channels/matlab)
 
-# Underwater Acoustic Channel Toolbox - MATLAB / Octave
+# Underwater Acoustic Channel Toolbox — MATLAB / Octave
 
-[![Generic badge](https://img.shields.io/badge/MATLAB-R2021a-BLUE.svg)](https://shields.io/) with [Signal Processing Toolbox™](https://www.mathworks.com/products/signal.html) or [![Generic badge](https://img.shields.io/badge/Octave-9.0-BLUE.svg)](https://shields.io) with [signal](https://gnu-octave.github.io/packages/signal/) and [statistics](https://gnu-octave.github.io/packages/statistics/) packages.
+[![Generic badge](https://img.shields.io/badge/MATLAB-R2021a-BLUE.svg)](https://shields.io/) with [Signal Processing Toolbox™](https://www.mathworks.com/products/signal.html) or [![Generic badge](https://img.shields.io/badge/Octave-9.0-BLUE.svg)](https://shields.io) with the [signal](https://gnu-octave.github.io/packages/signal/) and [statistics](https://gnu-octave.github.io/packages/statistics/) packages.
 
-MATLAB®/Octave toolbox to apply underwater acoustic channels to a signal of your choice, or to unpack an underwater acoustic channel. To learn more about the channels, check out the [documentation](https://uwa-channels.github.io/). 
+MATLAB®/Octave toolbox for replaying signals through measured underwater acoustic channels, generating realistic ocean noise, and unpacking stored impulse responses.  To learn more about the channels, check out the [documentation](https://uwa-channels.github.io/).
 
-Please report bugs and suggest enhancements by [creating a new issue](https://github.com/uwa-channels/matlab/issues). We welcome your comments.  See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+Please report bugs and suggest enhancements by [creating a new issue](https://github.com/uwa-channels/matlab/issues).  We welcome your feedback.  See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 
-## Using the replay and noise generation functions
+## Functions
 
-This code repository contains the function `replay` and noise generation function `noisegen` in the `src` folder. To replay your desired signal, download MAT-files from [here](https://www.dropbox.com/scl/fo/3gyt4cgw47jfx716v0epd/AIqYaL5S2RxGylREu3sn-vY?rlkey=w2mvoklkm42zrrf6k6lwlzcxu&st=u3u6b5r9&dl=0), and store them in a folder where MATLAB®/Octave can find them.
+| Function | Description |
+|----------|-------------|
+| `replay` | Pass a passband signal through a measured underwater acoustic channel. |
+| `noisegen` | Generate realistic ocean noise: pink Gaussian (17 dB/decade), spatially-correlated Gaussian, or impulsive (symmetric α-stable). |
+| `unpack` | Reconstruct the full time-varying impulse response from the compressed representation. |
 
-To load the channel and noise MAT-files, and replay a signal of your choice through an underwater acoustic channel,
+## Quick start
+
+Download the channel MAT-files from [here](https://www.dropbox.com/scl/fo/3gyt4cgw47jfx716v0epd/AIqYaL5S2RxGylREu3sn-vY?rlkey=w2mvoklkm42zrrf6k6lwlzcxu&st=u3u6b5r9&dl=0) and place them where MATLAB®/Octave can find them.
+
+### Replay and noise generation
+
 ```matlab
 channel = load('blue_1.mat');
 noise = load('blue_1_noise.mat');
+
 y = replay(input, fs, array_index, channel);
 w = noisegen(size(y), fs, array_index, noise);
 r = y + 0.05 * w;
 ```
 
-In `examples/example_replay.m`, the `blue_1` channel is used. The `blue_1.mat` contains the channel impulse responses, while the `blue_1_noise.mat` contains the noise statistics extracted from the same recording. The script generates a single-carrier modulated BPSK signal consisting of `n_repeat` repetitions of a pseudo-random sequence, passes the signal through the `blue_1` channel, and adds `blue_1` noise. Three plots are displayed: the received signal amplitude in time, the cross-correlation between the received signal and the transmitted signal, where `n_repeat` peaks are visible, and the spectrum of the received signal. Multiple curves on each plot correspond to multiple receiving elements. 
+See `examples/example_replay.m` for a complete example that generates a BPSK signal, replays it through the `blue_1` channel, adds noise, and plots the received signal, cross-correlation, and spectrum.
 
-## Using the unpack function
+### Unpack
 
-To unpack an underwater acoustic channel,
 ```matlab
 channel = load('blue_1.mat');
 unpacked = unpack(fs_time, array_index, channel);
@@ -36,14 +45,51 @@ See `examples/example_unpack.m` for details.
 
 [![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=uwa-channels/matlab)
 
+## Channel format
+
+Each channel MAT-file contains:
+
+| Variable | Description |
+|----------|-------------|
+| `h_hat` | Estimated impulse response, size (K × M × T) |
+| `theta_hat` or `phi_hat` | Phase or delay-phase trajectory, size (M × N) |
+| `params` | Struct with `fs_delay`, `fs_time`, `fc` |
+| `meta` | Estimation metadata (see [estimate](https://github.com/uwa-channels/estimate) repo) |
+| `version` | File format version |
+
+Each noise MAT-file contains:
+
+| Field | Description |
+|-------|-------------|
+| `Fs` | Sampling rate at which noise statistics were measured [Hz] |
+| `R` | Signal bandwidth [Hz] |
+| `alpha` | Stability index (2 = Gaussian, < 2 = impulsive) |
+| `beta` | Mixing coefficients, size (M × M × K) |
+| `fc` | Center frequency [Hz] |
+| `rms_power` | Per-channel RMS power scaling, size (M × 1) |
+| `version` | Noise struct version |
+
 ## Tests
-This repository includes automated testing and deployment powered by [GitHub Actions](https://github.com/uwa-channels/matlab/actions). In the [tests](/tests) folder, you will find three test suites covering the core functionalities: replay, noise generation, and unpacking.
 
-In particular, the replay test suite generates a random mobile channel and transmits a signal through it. A simple matched filter is then applied to verify whether the correlation peaks correspond to the actual channel multipath structure. If specific criteria are met, the test passes.
+This repository includes automated testing via [GitHub Actions](https://github.com/uwa-channels/matlab/actions).  The [tests](/tests) folder contains three test suites:
 
-These tests are executed automatically whenever changes are made to the source code, ensuring the continued correctness of the core functionalities.
+| Test | What it verifies |
+|------|-----------------|
+| `testReplay` | Generates random mobile channels ({static, mobile} × {theta\_hat, phi\_hat}), transmits a signal, and checks that cross-correlation peaks match the true multipath structure. |
+| `testNoise` | Verifies output size, spectral shape (17 dB/decade), spatial correlation (theoretical vs. sample), bandpass filtering, rms\_power scaling, Gaussianity (α = 2), and heavy-tail behavior (α < 2). |
+| `testUnpack` | Tests all tracking modes (none, theta\_hat, phi\_hat, f\_resamp, and combinations) for correct impulse response reconstruction. |
 
-# License
+Tests run automatically on every push, ensuring continued correctness of the core functions.
+
+## Related repositories
+
+| Repository | Description |
+|------------|-------------|
+| [uwa-channels/estimate](https://github.com/uwa-channels/estimate) | Channel estimation from single-carrier signals, with visualization. |
+| [uwa-channels/python](https://github.com/uwa-channels/python) | Python implementation of the replay toolbox. |
+
+## License
+
 The license is available in the [LICENSE](LICENSE) file within this repository.
 
-© 2025-2026, Underwater Acoustic Channels Group.
+© 2025–2026, Underwater Acoustic Channels Group.
