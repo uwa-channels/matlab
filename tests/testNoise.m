@@ -442,7 +442,13 @@ classdef testNoise < matlab.unittest.TestCase
       w = noisegen(input_size, testCase.fs, 1:M, noise);
 
       C_pearson = corrcoef(w);
-      C_spearman = corr(w, 'Type', 'Spearman');
+      % Spearman = Pearson on ranks (no Statistics Toolbox needed)
+      w_ranked = zeros(size(w));
+      for m = 1:size(w, 2)
+        [~, idx] = sort(w(:, m));
+        w_ranked(idx, m) = (1:size(w, 1)).';
+      end
+      C_spearman = corrcoef(w_ranked);
 
       % Gaussian-predicted correlation (reference)
       R_theory = zeros(M);
