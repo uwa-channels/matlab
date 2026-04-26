@@ -1,5 +1,7 @@
 [![CI](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml/badge.svg)](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/uwa-channels/matlab/graph/badge.svg?token=NQ1M28NGYM)](https://codecov.io/gh/uwa-channels/matlab)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19643731.svg)](https://doi.org/10.5281/zenodo.19643731)
+
 
 # Underwater Acoustic Channel Toolbox — MATLAB / Octave
 
@@ -19,7 +21,7 @@ Please report bugs and suggest enhancements by [creating a new issue](https://gi
 
 ## Quick start
 
-Download the channel MAT-files from [here](https://www.dropbox.com/scl/fo/3gyt4cgw47jfx716v0epd/AIqYaL5S2RxGylREu3sn-vY?rlkey=w2mvoklkm42zrrf6k6lwlzcxu&st=u3u6b5r9&dl=0) and place them where MATLAB®/Octave can find them.
+Download the channel MAT-files from [here](https://zenodo.org/records/19643731) and place them where MATLAB®/Octave can find them.
 
 ### Replay and noise generation
 
