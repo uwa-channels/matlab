@@ -72,7 +72,9 @@ elseif nargin == 4
   w = noise_mixing(input_size, fs, noise, array_index);
 
   %% Per-channel RMS power scaling
-  w = w .* noise.rms_power(array_index).';
+  if isfield(noise, 'rms_power')
+    w = w .* noise.rms_power(array_index).';
+  end
 
   %% Bandpass filtering
   fl = noise.fc - noise.R/2*1.1;
