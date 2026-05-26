@@ -19,7 +19,7 @@ addpath('../src');
 
 %% Load channel impulse responses and noise statistics. Refer to README.md for instructions.
 channel = load('blue_1.mat');
-noise = load('blue_1_noise.mat');
+noise = load('blue_noise.mat');
 
 %% Parameters
 fs = 48e3; % Sampling rate
