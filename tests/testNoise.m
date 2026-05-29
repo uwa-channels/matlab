@@ -14,8 +14,9 @@ classdef testNoise < matlab.unittest.TestCase
   % The stability index alpha determines the distribution:
   %   alpha == 2  => Gaussian (stabrnd reduces to Box-Muller).
   %   alpha <  2  => Symmetric alpha-stable (impulsive).
-  % Bandpass filtering (fc +/- R/2*1.1) and rms_power scaling
-  % are always applied when the noise struct is provided.
+  % Bandpass filtering (fc +/- R/2*1.01) and per-channel rms_power
+  % normalization (divide) are always applied when the noise struct
+  % is provided.
   %
   % The synthetic noise struct is modeled on real experimental
   % data (12-element ULA, 65 mixing taps, Fs=39062.5 Hz,
@@ -222,18 +223,19 @@ classdef testNoise < matlab.unittest.TestCase
     end
 
     function testOption2_rms_scaling(testCase)
-      % Verify per-channel rms_power scaling.
-      % Use identity beta to avoid cross-channel leakage.
+      % Verify per-channel rms_power normalization. noisegen divides each
+      % channel by rms_power, so a larger rms_power yields a smaller
+      % output rms. Use identity beta to avoid cross-channel leakage.
       noise = make_noise_struct(2);
       M = size(noise.beta, 1);
       noise.beta = repmat(eye(M), [1, 1, 65]);
       noise.rms_power = ones(M, 1);
-      noise.rms_power(1) = 3;
-      noise.rms_power(2) = 1;
+      noise.rms_power(1) = 1;
+      noise.rms_power(2) = 3;
 
       input_size = [500000, 2];
       w = noisegen(input_size, testCase.fs, [1, 2], noise);
-      rms_ratio = rms(w(:, 1)) / rms(w(:, 2));
+      rms_ratio = rms(w(:, 1)) / rms(w(:, 2));   % expect rms_power(2)/rms_power(1) = 3
 
       testCase.verifyEqual(rms_ratio, 3, 'RelTol', 0.15, ...
         sprintf('RMS ratio %.2f, expected ~3', rms_ratio));
@@ -346,18 +348,19 @@ classdef testNoise < matlab.unittest.TestCase
     end
 
     function testOption3_rms_scaling(testCase)
-      % Verify rms_power scaling.
+      % Verify rms_power normalization for impulsive noise.
+      % noisegen divides each channel by rms_power.
       % Use identity beta to avoid cross-channel leakage.
       noise = make_noise_struct(1.9);
       M = size(noise.beta, 1);
       noise.beta = repmat(eye(M), [1, 1, 65]);
       noise.rms_power = ones(M, 1);
-      noise.rms_power(1) = 2;
-      noise.rms_power(2) = 0.5;
+      noise.rms_power(1) = 0.5;
+      noise.rms_power(2) = 2;
 
       input_size = [500000, 2];
       w = noisegen(input_size, testCase.fs, [1, 2], noise);
-      rms_ratio = rms(w(:, 1)) / rms(w(:, 2));
+      rms_ratio = rms(w(:, 1)) / rms(w(:, 2));   % expect rms_power(2)/rms_power(1) = 4
 
       testCase.verifyEqual(rms_ratio, 4, 'RelTol', 0.5, ...
         sprintf('RMS ratio %.2f, expected ~4', rms_ratio));

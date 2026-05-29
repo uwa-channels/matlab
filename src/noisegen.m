@@ -18,7 +18,9 @@ function w = noisegen(input_size, fs, varargin)
 %   alpha     - Stability index of the S-alpha-S distribution (2 = Gaussian).
 %   beta      - Mixing coefficients, size [M x M x K].
 %   fc        - Center frequency [Hz].
-%   rms_power - Per-channel RMS power scaling, size [M x 1].
+%   rms_power - Per-channel RMS (std) of the unscaled mixed+bandpassed noise,
+%               size [M x 1]. Generation divides by this so each output
+%               channel has unit power and the summed power equals M.
 %   version   - Noise struct version (>= 1.0).
 %
 % ARRAY_INDEX specifies the indices of the receiver elements through which
@@ -71,9 +73,9 @@ elseif nargin == 4
   %% Mixing-coefficient generation (Gaussian or impulsive)
   w = noise_mixing(input_size, fs, noise, array_index);
 
-  %% Per-channel RMS power scaling
+  %% Per-channel RMS power normalization
   if isfield(noise, 'rms_power')
-    w = w .* noise.rms_power(array_index).';
+    w = w ./ noise.rms_power(array_index).';
   end
 
   %% Bandpass filtering
@@ -94,9 +96,11 @@ assert(noise.version >= 1.0, ...
 
 M = size(noise.beta, 1);
 
-assert(length(unique(array_index)) == length(array_index));
-assert(input_size(2) <= M, 'The number of signal channels, %d, should be less than %d.', ...
-  input_size(2), M)
+assert(length(unique(array_index)) == length(array_index), ...
+  'array_index must contain unique entries.');
+assert(input_size(2) == length(array_index), ...
+  'input_size(2) (%d) must equal length(array_index) (%d).', ...
+  input_size(2), length(array_index));
 assert(max(array_index) <= M, ...
   'The largest receive channel array_index, %d, should be less than %d.', ...
   max(array_index), M);
@@ -128,10 +132,9 @@ function w = noise_mixing(input_size, fs, noise, array_index)
 %   alpha == 2: Gaussian (stabrnd Box-Muller path).
 %   alpha <  2: Symmetric alpha-stable (impulsive).
 %
-% The mixing w(n,i) = sum_j sum_k beta(i,j,k) * z(n+k-1, j)
-% is computed as cross-correlation in the frequency domain:
-%   W_i(f) = sum_j Z_j(f) .* conj(B_{ij}(f))
-%   w(:,i) = ifft(W_i)
+% Time-domain mixing:
+%   w(n, i) = sum_j sum_k beta(i, j, k) * z(n+k-1, j)
+% One BLAS matmul per tap k, restricted to the requested output rows.
 alpha = noise.alpha;
 beta = noise.beta;
 Fs = noise.Fs;
@@ -144,31 +147,18 @@ K = signal_size(1);
 M = size(beta, 1);
 K_mix = size(beta, 3);
 
-z = stabrnd(alpha, 0, 1, 0, K+K_mix, M);
+z = stabrnd(alpha, 0, 1, 0, K + K_mix, M);
 
-% FFT length (next power of 2 for speed)
-nfft = 2^nextpow2(K + K_mix);
+beta_sub = beta(array_index, :, :);   % Nout x M x K_mix
 
-% Forward FFT of innovation channels (M transforms, reused for all i)
-Z = fft(z(1:K+K_mix, :), nfft, 1);  % nfft x M
-
-% FFT of beta taps per (i,j) pair
-B = fft(beta, nfft, 3);  % M x M x nfft
-
-% Only compute requested output channels
 w = zeros(K, length(array_index));
-for idx = 1:length(array_index)
-  i = array_index(idx);
-  Bi = reshape(B(i, :, :), M, nfft);  % M x nfft
-  W_i = sum(Z .* conj(Bi.'), 2);      % nfft x 1
-  w_full = real(ifft(W_i));
-  w(:, idx) = w_full(1:K);
+for k = 1:K_mix
+  w = w + z(k:k+K-1, :) * beta_sub(:, :, k).';
 end
 
 w = resample(w, p, q, 'Dimension', 1);
 w = w(1:input_size(1), :);
 end
-
 
 function x = stabrnd(alpha, beta, c, delta, m, n)
 
