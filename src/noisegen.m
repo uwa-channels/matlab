@@ -104,7 +104,7 @@ end
 
 
 function w = noise_pink(input_size, fs)
-% Generate textbook style noise: independent pink Gaussian noise (17dB/decade) across array elements.
+% Generate textbook style noise: independent pink Gaussian noise (17 dB per decade) across array elements. Each channel has unit expected power, so the summed power over channels equals the channel count.
 nfft = 4096;
 fmin = 0;
 fmax = fs/2;
@@ -115,6 +115,7 @@ H_oneside(1:floor(fmin/(fs / 2 / nfft))) = 0;
 H_oneside(ceil(fmax/(fs / 2 / nfft)):end) = 0;
 H = sqrt([H_oneside, flip(H_oneside(2:end))]);
 h = fftshift(ifft(H));
+h = h / sqrt(sum(h.^2));
 w = randn(input_size);
 for m = 1:input_size(2)
   w(:, m) = conv(w(:, m), h, 'same');
