@@ -77,8 +77,8 @@ elseif nargin == 4
   end
 
   %% Bandpass filtering
-  fl = noise.fc - noise.R/2*1.1;
-  fh = noise.fc + noise.R/2*1.1;
+  fl = noise.fc - noise.R/2*1.01;
+  fh = noise.fc + noise.R/2*1.01;
   w = bandpass(w, [fl, fh], fs, "steepness", 0.9);
 else
   error('Wrong noise option.');
