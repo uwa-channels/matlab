@@ -98,7 +98,7 @@ if isfield(channel, 'f_resamp')
     [p2, q2] = rat(channel.f_resamp);
     output_resampled = resample(output_resampled, p2, q2, 'Dimension', 1);
 end
-output = M ./ sqrt(sum(pwr(output_resampled))) .* output_resampled;
+output = sqrt(M) ./ sqrt(sum(pwr(output_resampled))) .* output_resampled;
 
 end
 
