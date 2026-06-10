@@ -44,7 +44,15 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 %
 % Revision history:
 %   - Apr.  1, 2025: Initial release.
-%   - Feb. 27, 2026: Fixed delay insertion for theta_hat vs phi_hat.
+%   - Apr. 20, 2025: Added support for channels without phase tracking;
+%                    accumulated phase contributions from theta_hat and
+%                    f_resamp separately for Watermark compatibility.
+%   - Feb. 27, 2026: Separated phi_hat (delay + phase) from theta_hat
+%                    (phase only); restructured phase and drift fields.
+%   - Jun. 10, 2026: Removed global normalization; fixed spline
+%                    extrapolation by clamping out-of-range values to zero;
+%                    replaced resample with interp1 (pchip) for phase and
+%                    drift to eliminate FIR edge-effect ripples.
 %
 
 %% Unpacking variables
@@ -103,28 +111,29 @@ has_drift = isfield(channel, 'phi_hat') || isfield(channel, 'f_resamp');
 
 unpacked_channel = zeros(K, length(array_index), ceil(T*p1/q1));
 
+t_orig = (0:N_phi-1) ./ fs_delay;
+
 for m = 1:length(array_index)
   h_hat_m = squeeze(h_hat(:, m, :));
   h_resampled = resample(h_hat_m, p1, q1, 'Dimension', 2);
+  t_new = (0:size(h_resampled, 2)-1) ./ fs_time_desired;
 
   if has_phase
-    phase_resampled = resample(phase_all(m, :), p2, q2);
+    phase_resampled = interp1(t_orig, phase_all(m, :), t_new, 'pchip', 'extrap');
     h_resampled = h_resampled .* exp(1j * phase_resampled);
   end
 
   if has_drift
-    drift_resampled = resample(phase_drift(m, :), p2, q2);
+    drift_resampled = interp1(t_orig, phase_drift(m, :), t_new, 'pchip', 'extrap');
     drift = drift_resampled ./ (2 * pi * fc);
     for t = 1:size(h_resampled, 2)
       h_resampled(:, t) = interp1(delays, h_resampled(:, t), ...
-        delays + drift(t), 'spline');
+        delays + drift(t), 'spline', 0);
     end
   end
 
   unpacked_channel(:, m, :) = h_resampled;
 end
-
-unpacked_channel = unpacked_channel ./ max(abs(unpacked_channel), [], 'all');
 
 end
 
