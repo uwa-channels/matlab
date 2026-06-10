@@ -244,7 +244,7 @@ classdef testReplay < matlab.unittest.TestCase
       input = [zeros(round(fs/10), 1); passband; zeros(round(fs/10), 1)];
 
       %% 6. Replay
-      r = replay(input, fs, 1:p.M, channel, start);
+      r = replay(input, fs, channel, start);
 
       %% 7. Phase field for compensation
       switch p.tracking
