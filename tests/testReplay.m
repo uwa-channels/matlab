@@ -1,11 +1,14 @@
 classdef testReplay < matlab.unittest.TestCase
   % TESTREPLAY Unit tests for replay.m
   %
-  % Tests {static, mobile} x {theta_hat, phi_hat} across various
+  % Tests {static, mobile} x {theta_hat, phi_hat, f_resamp} across various
   % speed configurations.
   %
   %   theta_hat: phase tracking only. h_hat drifts with motion.
   %   phi_hat:   phase + delay tracking. h_hat is static.
+  %   f_resamp:  bulk Doppler (Watermark). h_hat is static.
+  %     Can appear alone (tracking='none') or combined with theta/phi for
+  %     residual motion. Mirrors the convention in testUnpack Cases 6–8.
   %
   % Other m-files required: replay.m
   % Subfunctions: place_taps, compensate_doppler, randsamples
@@ -149,6 +152,30 @@ classdef testReplay < matlab.unittest.TestCase
       'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
       'tracking', 'phi', ...
       'v_const', 4, 'v_amp', 1.2, 'n_cycles', 3), ...
+      ...
+      ... %% === Watermark (f_resamp) — mirrors testUnpack Cases 6–8 ===
+      ...
+      struct( ... % Case 15: f_resamp only, static h_hat
+      'label', 'watermark_f_resamp_only', ...
+      'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 20, ...
+      'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
+      'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
+      'tracking', 'none', 'has_f_resamp', true, ...
+      'v_const', 2, 'v_amp', 0, 'n_cycles', 0), ...
+      struct( ... % Case 16: f_resamp handles bulk, theta_hat = residual
+      'label', 'watermark_f_resamp_theta', ...
+      'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 100, ...
+      'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
+      'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
+      'tracking', 'theta', 'has_f_resamp', true, ...
+      'v_const', 2, 'v_amp', 1, 'n_cycles', 3), ...
+      struct( ... % Case 17: f_resamp handles bulk, phi_hat = residual
+      'label', 'watermark_f_resamp_phi', ...
+      'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 20, ...
+      'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
+      'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
+      'tracking', 'phi', 'has_f_resamp', true, ...
+      'v_const', 2, 'v_amp', -1, 'n_cycles', 3), ...
       };
   end
 
@@ -198,21 +225,30 @@ classdef testReplay < matlab.unittest.TestCase
       end
 
       phi = -2*pi*p.fc * (p.v_const/c) .* t_delay;
+      phi_sin = zeros(size(t_delay));
       if p.n_cycles > 0
-        phi = phi + p.fc * p.v_amp * T_ch ...
-          / (c * p.n_cycles) ...
+        phi_sin = p.fc * p.v_amp * T_ch / (c * p.n_cycles) ...
           * (cos(omega_osc * t_delay) - 1);
+        phi = phi + phi_sin;
       end
 
       %% 3. Build h_hat
       L = ceil(p.fs_delay * p.Tmp * 1.5);
       has_motion = (p.v_const ~= 0) || (p.v_amp ~= 0);
 
+      % Delay drift carried by the taps. With f_resamp present, the bulk
+      % drift from v_const is absorbed by resampling, so h_hat drifts only
+      % with the residual sway.
+      dtau_h = dtau_snap;
+      if isfield(p, 'has_f_resamp') && p.has_f_resamp
+        dtau_h = dtau_snap - (p.v_const / c) * t_snapshots;
+      end
+
       if strcmp(p.tracking, 'theta') && has_motion
         h_hat = zeros(L, p.M, N_time);
         for k = 1:N_time
           h_hat(:, :, k) = place_taps(L, p.M, ...
-            path_delay_0 + dtau_snap(k), ...
+            path_delay_0 + dtau_h(k), ...
             c_p, p.Tmp, p.fs_delay);
         end
       else
@@ -229,11 +265,19 @@ classdef testReplay < matlab.unittest.TestCase
       channel.params.fc = p.fc;
       channel.version = 1.0;
 
+      phi_tracking = phi;
+      if isfield(p, 'has_f_resamp') && p.has_f_resamp
+        phi_tracking = phi_sin;
+      end
+
       switch p.tracking
         case 'theta'
-          channel.theta_hat = repmat(phi, p.M, 1);
+          channel.theta_hat = repmat(phi_tracking, p.M, 1);
         case 'phi'
-          channel.phi_hat = repmat(phi, p.M, 1);
+          channel.phi_hat = repmat(phi_tracking, p.M, 1);
+      end
+      if isfield(p, 'has_f_resamp') && p.has_f_resamp
+        channel.f_resamp = 1 / (1 + p.v_const / c);
       end
 
       %% 5. Transmit signal
@@ -252,6 +296,12 @@ classdef testReplay < matlab.unittest.TestCase
           phi_field = channel.theta_hat;
         case 'phi'
           phi_field = channel.phi_hat;
+        otherwise
+          phi_field = zeros(p.M, length(t_delay));
+      end
+      if isfield(p, 'has_f_resamp') && p.has_f_resamp
+        phi_field = phi_field + (1/channel.f_resamp - 1) * 2*pi*p.fc ...
+          * repmat(t_delay, p.M, 1);
       end
 
       %% 8. Cross-correlation and verification
