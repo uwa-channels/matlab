@@ -400,13 +400,14 @@ classdef testReplay < matlab.unittest.TestCase
         [~, idx_e] = sort(est_delays);
         [~, idx_t] = sort(path_delay_0(:, m));
 
-        n_compare = min(n_found, p.n_path);
-        tol = 2e-4 * p.n_path;
-        if n_found > 0
-          criteria(m) = abs( ...
-            sum(est_delays(idx_e(1:n_compare)) .* est_gains(idx_e(1:n_compare)).') - ...
-            sum(path_delay_0(idx_t(1:n_compare), m) .* path_gain(idx_t(1:n_compare), m))) ...
-            < tol;
+        n_found = length(locs);
+        if n_found == p.n_path
+          est_delays = sort(lags_win(locs) / fs);
+          true_delays = sort(path_delay_0(:, m));
+          [~, idx_t] = sort(path_delay_0(:, m));
+          true_gains = path_gain(idx_t, m);
+          tol = 2e-4 * p.n_path;
+          criteria(m) = sum(abs(est_delays(:) - true_delays) .* true_gains) < tol;
         end
       end
 
