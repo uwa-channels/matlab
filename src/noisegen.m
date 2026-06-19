@@ -72,16 +72,6 @@ if nargin == 2
 elseif nargin == 4
   %% Mixing-coefficient generation (Gaussian or impulsive)
   w = noise_mixing(input_size, fs, noise, array_index);
-
-  %% Per-channel RMS power normalization
-  if isfield(noise, 'rms_power')
-    w = w ./ noise.rms_power(array_index).';
-  end
-
-  %% Bandpass filtering
-  fl = noise.fc - noise.R/2*1.01;
-  fh = noise.fc + noise.R/2*1.01;
-  w = bandpass(w, [fl, fh], fs, "steepness", 0.96);
 else
   error('Wrong noise option.');
 end
@@ -147,7 +137,7 @@ K = signal_size(1);
 M = size(beta, 1);
 K_mix = size(beta, 3);
 
-z = stabrnd(alpha, 0, 1, 0, K + K_mix, M);
+z = stabrnd(alpha, 0, 1/sqrt(2), 0, K + K_mix, M);
 
 beta_sub = beta(array_index, :, :);   % Nout x M x K_mix
 
