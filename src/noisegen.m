@@ -57,6 +57,10 @@ function w = noisegen(input_size, fs, varargin)
 %   - Mar. 9, 2026: Unified noise struct (alpha, beta, Fs, R, fc,
 %                    rms_power, version). Removed Cholesky (sigma/h)
 %                    path in favor of mixing-coefficient method.
+%   - Jul. 8, 2026: Vectorized generation for speed. Pink noise uses
+%                    fftfilt (FFT overlap-add) across all channels; mixing
+%                    uses conv2 per output channel instead of a per-tap
+%                    slice-copy matmul loop. Output is unchanged.
 %
 
 
@@ -98,7 +102,8 @@ end
 
 
 function w = noise_pink(input_size, fs)
-% Generate textbook style noise: independent pink Gaussian noise (17 dB per decade) across array elements. Each channel has unit expected power, so the summed power over channels equals the channel count.
+% Generate textbook style noise: independent pink Gaussian noise (17 dB per decade) across array elements.
+% Each channel has unit expected power, so the summed power over channels equals the channel count.
 nfft = 4096;
 fmin = 0;
 fmax = fs/2;
@@ -111,9 +116,13 @@ H = sqrt([H_oneside, flip(H_oneside(2:end))]);
 h = fftshift(ifft(H));
 h = h / sqrt(sum(h.^2));
 w = randn(input_size);
-for m = 1:input_size(2)
-  w(:, m) = conv(w(:, m), h, 'same');
-end
+% Column-wise 'same' FIR convolution via FFT overlap-add (fftfilt): filters
+% all channels in one call and avoids the per-sample time-domain cost of the
+% long (length(h) ~ 2*nfft) filter. fftfilt returns the causal convolution,
+% so pad by the 'same' offset and crop to recover the centered output.
+offset = floor(length(h)/2);
+w = fftfilt(h(:), [w; zeros(offset, input_size(2))]);
+w = w(offset+1:offset+input_size(1), :);
 end
 
 
@@ -122,9 +131,11 @@ function w = noise_mixing(input_size, fs, noise, array_index)
 %   alpha == 2: Gaussian (stabrnd Box-Muller path).
 %   alpha <  2: Symmetric alpha-stable (impulsive).
 %
-% Time-domain mixing:
+% Time-domain mixing, expressed as a 2-D correlation:
 %   w(n, i) = sum_j sum_k beta(i, j, k) * z(n+k-1, j)
-% One BLAS matmul per tap k, restricted to the requested output rows.
+% For each output channel i this is conv2 of the driver matrix z with the
+% 180-degree-rotated mixing kernel (valid shape). conv2 streams over z once
+% per output channel instead of copying a shifted K x M block for every tap.
 alpha = noise.alpha;
 beta = noise.beta;
 Fs = noise.Fs;
@@ -140,10 +151,13 @@ K_mix = size(beta, 3);
 z = stabrnd(alpha, 0, 1/sqrt(2), 0, K + K_mix, M);
 
 beta_sub = beta(array_index, :, :);   % Nout x M x K_mix
+Nout = length(array_index);
 
-w = zeros(K, length(array_index));
-for k = 1:K_mix
-  w = w + z(k:k+K-1, :) * beta_sub(:, :, k).';
+w = zeros(K, Nout);
+for i = 1:Nout
+  kernel = reshape(beta_sub(i, :, :), M, K_mix).';   % K_mix x M, kernel(k, j) = beta(i, j, k)
+  wi = conv2(z, rot90(kernel, 2), 'valid');          % (K+1) x 1 correlation over all input channels
+  w(:, i) = wi(1:K);
 end
 
 w = resample(w, p, q, 'Dimension', 1);

@@ -22,7 +22,7 @@ function output = replay(input, fs, channel, varargin)
 %    See example_replay.m.
 %
 % Other m-files required: None
-% Subfunctions: validate_inputs, pwr
+% Subfunctions: validate_inputs
 % Toolbox required: Signal Processing Toolbox (for resample function).
 % MAT-files required: Channel MAT-file.
 %
@@ -42,6 +42,9 @@ function output = replay(input, fs, channel, varargin)
 %   - May. 30, 2026: Added power scaling to sqrt(M)/sqrt(sum(pwr)).
 %   - Jun. 10, 2026: Removed array_index parameter; function now uses all
 %                    channels in channel.h_hat.
+%   - Jul.  7, 2026: Removed normalization from replay.m.
+%   - Jul.  8, 2026: Vectorized the time-varying convolution (sum over the
+%                    L filter taps instead of a per-sample dot product).
 %
 
 %% Simple checks
@@ -74,42 +77,40 @@ output = zeros(T+buffer+L, M);
 baseband = [zeros(L-1, 1); baseband; zeros(L-1, 1)];
 channel_time = (0:size(channel.h_hat, 3) - 1) ./ fs_time;
 signal_time = ((0:T + L + buffer - 1) + start) ./ fs_delay;
+N = T + L - 1;
 for m = 1:M
     h_hat_m = flip(squeeze(channel.h_hat(:, m, :)).', 2);
     ir = interp1(channel_time, h_hat_m, signal_time, 'spline');
+
+    % Time-varying convolution
+    conv_out = zeros(N, 1);
+    for l = 1:L
+        conv_out = conv_out + ir(1:N, l) .* baseband(l:l+N-1);
+    end
+
     if isfield(channel, 'phi_hat')
-        for t = 1:T + L - 1
-            output(t, m) = ir(t, :) * baseband(t:t+L-1) .* exp(1j*channel.phi_hat(m, t+start-1));
-        end
+        phase = exp(1j * channel.phi_hat(m, start:start+N-1)).';
+        output(1:N, m) = conv_out .* phase;
         % Insert the drift
         drift = channel.phi_hat(m, (0:T + L + buffer - 1)+start) ./ (2 * pi * fc);
         output(:, m) = interp1(signal_time, output(:, m), signal_time+drift, 'spline');
     elseif isfield(channel, 'theta_hat')
-        for t = 1:T + L - 1
-            output(t, m) = ir(t, :) * baseband(t:t+L-1) .* exp(1j*channel.theta_hat(m, t+start-1));
-        end
+        phase = exp(1j * channel.theta_hat(m, start:start+N-1)).';
+        output(1:N, m) = conv_out .* phase;
     else
-        for t = 1:T + L - 1
-            output(t, m) = ir(t, :) * baseband(t:t+L-1);
-        end
+        output(1:N, m) = conv_out;
     end
 end
 
 %% Resample to match the original sampling rate and upshift to fc
-output_resampled = resample(output, q, p, 'Dimension', 1);
-output_resampled = real(output_resampled.*exp(2j*pi*fc*(0:size(output_resampled, 1) - 1).'/fs));
+output = resample(output, q, p, 'Dimension', 1);
+output = sqrt(2) * real(output .*exp(2j*pi*fc*(0:size(output, 1) - 1).'/fs));
 
 if isfield(channel, 'f_resamp')
     [p2, q2] = rat(channel.f_resamp);
-    output_resampled = resample(output_resampled, p2, q2, 'Dimension', 1);
-end
-output = sqrt(M) ./ sqrt(sum(pwr(output_resampled))) .* output_resampled;
-
+    output= resample(output, p2, q2, 'Dimension', 1);
 end
 
-
-function p = pwr(x)
-p = mean(abs(x).^2, 1);
 end
 
 
