@@ -104,11 +104,11 @@ end
 
 %% Resample to match the original sampling rate and upshift to fc
 output = resample(output, q, p, 'Dimension', 1);
-output = sqrt(2) * real(output .*exp(2j*pi*fc*(0:size(output, 1) - 1).'/fs));
+output = sqrt(2) .* real(output .*exp(2j*pi*fc*(0:size(output, 1) - 1).'/fs));
 
 if isfield(channel, 'f_resamp')
     [p2, q2] = rat(channel.f_resamp);
-    output= resample(output, p2, q2, 'Dimension', 1);
+    output = resample(output, p2, q2, 'Dimension', 1);
 end
 
 end

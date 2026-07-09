@@ -37,7 +37,7 @@ passband = real(baseband.*exp(1i*2*pi*fc*(0:length(baseband) - 1).'/fs));
 input = [zeros(round(fs/10), 1); passband; zeros(round(fs/10), 1);];
 
 %% Replay and generate noise
-y = replay2(input, fs, channel);
+y = replay(input, fs, channel);
 y = y(:, array_index);
 if textbook_noise
   w = noisegen(size(y), fs);
