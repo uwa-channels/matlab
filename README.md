@@ -29,8 +29,8 @@ Download the channel MAT-files from [here](https://zenodo.org/records/19643731) 
 channel = load('blue_1.mat');
 noise = load('blue_1_noise.mat');
 
-y = replay(input, fs, array_index, channel);
-w = noisegen(size(y), fs, array_index, noise);
+y = replay(input, fs, channel);
+w = noisegen(size(y), fs, noise);
 r = y + 0.05 * w;
 ```
 
