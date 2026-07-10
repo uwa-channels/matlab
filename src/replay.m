@@ -80,7 +80,7 @@ signal_time = ((0:T + L + buffer - 1) + start) ./ fs_delay;
 N = T + L - 1;
 for m = 1:M
     h_hat_m = flip(squeeze(channel.h_hat(:, array_index(m), :)).', 2);
-    ir = interp1(channel_time, h_hat_m, signal_time, 'spline');
+    ir = interp1(channel_time, h_hat_m, signal_time, 'spline', 0);
 
     % Time-varying convolution
     conv_out = zeros(N, 1);
