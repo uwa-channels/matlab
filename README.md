@@ -29,8 +29,9 @@ Download the channel MAT-files from [here](https://zenodo.org/records/19643731) 
 channel = load('blue_1.mat');
 noise = load('blue_1_noise.mat');
 
-y = replay(input, fs, channel);
-w = noisegen(size(y), fs, noise);
+array_index = [1, 2, 3];
+y = replay(input, fs, array_index, channel);
+w = noisegen(size(y), fs, array_index, noise);
 r = y + 0.05 * w;
 ```
 
@@ -77,7 +78,7 @@ This repository includes automated testing via [GitHub Actions](https://github.c
 
 | Test | What it verifies |
 |------|-----------------|
-| `testReplay` | Generates random mobile channels ({static, mobile} × {theta\_hat, phi\_hat}), transmits a signal, and checks that cross-correlation peaks match the true multipath structure. |
+| `testReplay` | Generates random mobile channels ({static, mobile} × {theta\_hat, phi\_hat}), transmits a signal, and checks that cross-correlation peaks match the true multipath structure; also checks that `array_index` isolates individual hydrophones and that the output power scaling is O(1). |
 | `testNoise` | Verifies output size, spectral shape (17 dB/decade), spatial correlation (theoretical vs. sample), bandpass filtering, rms\_power scaling, Gaussianity (α = 2), and heavy-tail behavior (α < 2). |
 | `testUnpack` | Tests all tracking modes (none, theta\_hat, phi\_hat, f\_resamp, and combinations) for correct impulse response reconstruction. |
 

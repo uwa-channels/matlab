@@ -24,6 +24,8 @@ classdef testReplay < matlab.unittest.TestCase
   %
   % Revision history:
   %   - Feb. 27, 2026: Initial release.
+  %   - Jul. 10, 2026: Added testReplayPower: channel-isolation and
+  %                    output-power checks for the array_index API.
 
   properties (Constant)
     c = 1500;
@@ -288,7 +290,7 @@ classdef testReplay < matlab.unittest.TestCase
       input = [zeros(round(fs/10), 1); passband; zeros(round(fs/10), 1)];
 
       %% 6. Replay
-      r = replay(input, fs, channel, start);
+      r = replay(input, fs, 1:p.M, channel, start);
 
       %% 7. Phase field for compensation
       switch p.tracking
@@ -424,6 +426,80 @@ classdef testReplay < matlab.unittest.TestCase
 
       testCase.verifyTrue(all(criteria), ...
         sprintf('Peak delay mismatch for case: %s', p.label));
+    end
+
+    function testReplayPower(testCase)
+      % Two checks for the array_index API:
+      %   1. Isolation: replaying through a single hydrophone must equal the
+      %      corresponding column of a replay through all hydrophones (same
+      %      start). This holds only because output normalization was removed,
+      %      so each channel is processed independently of the selected set.
+      %   2. Power: after normalizing the channel matrix so the average
+      %      per-channel energy is 1 (cf. calib.m), a unit-variance passband
+      %      input replays to an output whose per-channel variance is O(1).
+
+      c = testCase.c;
+      fs = testCase.fs;
+      start = testCase.start;
+
+      fc = 12e3; fs_delay = 10e3; fs_time = 20;
+      M = 4; n_path = 8; R = 4e3; Tmp = 15e-3; coeff = 1.5; d = 0.5;
+      T_ch = 5;
+
+      %% 1. Multipath geometry (static channel)
+      path_delay_0 = [0; sort(randsamples( ...
+        (pi/3:Tmp*1e3) / 1e3, n_path - 1)).'];
+      incremental_delay = (0:M-1) * d / c;
+      path_delay_0 = path_delay_0 + incremental_delay;
+      path_delay_0 = path_delay_0 - min(path_delay_0, [], 'all');
+      path_gain = exp(-path_delay_0 * coeff ./ Tmp);
+      c_p = path_gain .* exp(-1j * 2 * pi * fc * path_delay_0);
+
+      L = ceil(fs_delay * Tmp * 1.5);
+      N_time = round(T_ch * fs_time);
+      h_hat_static = place_taps(L, M, path_delay_0, c_p, Tmp, fs_delay);
+      h_hat = repmat(h_hat_static, 1, 1, N_time);
+
+      %% 2. Normalize so the average per-channel energy is 1 (cf. calib.m)
+      T = size(h_hat, 3);
+      E_tot = sum(abs(h_hat(:)).^2);
+      E_tot_avg = E_tot / T;
+      alpha = sqrt(M / E_tot_avg);
+      h_hat = alpha * h_hat;
+
+      channel = struct();
+      channel.h_hat = h_hat;
+      channel.params.fs_delay = fs_delay;
+      channel.params.fs_time = fs_time;
+      channel.params.fc = fc;
+      channel.version = 1.0;
+
+      %% 3. Unit-variance passband probe
+      data_symbols = randi([0, 1], 8192, 1) * 2 - 1;
+      baseband = resample(data_symbols, fs / R, 1);
+      passband = real(baseband .* exp(1j*2*pi*fc*(0:length(baseband)-1).'/fs));
+      passband = passband ./ sqrt(var(passband));
+
+      %% 4. Replay one channel, and all channels, with the same start
+      target_ch = 3;
+      r_single = replay(passband, fs, target_ch, channel, start);
+      r_all = replay(passband, fs, 1:M, channel, start);
+
+      %% 5. Check 1: isolation
+      n = min(size(r_single, 1), size(r_all, 1));
+      ref = r_all(1:n, target_ch);
+      err = max(abs(r_single(1:n, 1) - ref)) / max(abs(ref));
+      testCase.verifyLessThan(err, 1e-10, ...
+        sprintf(['Single-channel replay does not match column %d of the ' ...
+        'full replay (relative err = %.2e).'], target_ch, err));
+
+      %% 6. Check 2: per-channel output power is O(1)
+      mean_var = mean(var(r_all));
+      fprintf('testReplayPower: per-channel output power mean = %.3f\n', mean_var);
+      testCase.verifyGreaterThan(mean_var, 0.95, ...
+        sprintf('Mean output power %.3f is unexpectedly small.', mean_var));
+      testCase.verifyLessThan(mean_var, 1.05, ...
+        sprintf('Mean output power %.3f is unexpectedly large.', mean_var));
     end
 
   end
