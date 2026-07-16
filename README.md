@@ -1,6 +1,6 @@
 [![CI](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml/badge.svg)](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/uwa-channels/matlab/graph/badge.svg?token=NQ1M28NGYM)](https://codecov.io/gh/uwa-channels/matlab)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19643731.svg)](https://doi.org/10.5281/zenodo.19643731)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21287414.svg)](https://doi.org/10.5281/zenodo.21287414)
 
 
 # Underwater Acoustic Channel Toolbox — MATLAB / Octave
