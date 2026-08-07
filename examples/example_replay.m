@@ -14,9 +14,6 @@ clc;
 clear;
 close all;
 
-%% Add the toolbox to the path
-addpath('../src');
-
 %% Load channel impulse responses and noise statistics. Refer to README.md for instructions.
 channel = load('blue_1.mat');
 noise = load('blue_noise.mat');
@@ -65,8 +62,5 @@ figure, plot(t, r), legend(legends), xlabel('Time [s]'), ylabel('Received signal
 figure, pwelch(r, kaiser(1024, 5), 512, 4096, fs)
 xlim([fc - R, fc + R]/1e3)
 legend(legends)
-
-%% Remove the toolbox from path
-rmpath('../src')
 
 % [EOF]

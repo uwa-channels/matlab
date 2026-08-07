@@ -19,9 +19,48 @@ Please report bugs and suggest enhancements by [creating a new issue](https://gi
 | `noisegen` | Generate realistic ocean noise: pink Gaussian (17 dB/decade), spatially-correlated Gaussian, or impulsive (symmetric α-stable). |
 | `unpack` | Reconstruct the full time-varying impulse response from the compressed representation. |
 
+## Installation
+
+### MATLAB
+
+Paste this into the MATLAB Command Window:
+
+```matlab
+matlab.addons.install(websave([tempname '.mltbx'], 'https://github.com/uwa-channels/matlab/releases/latest/download/uwa-channels.mltbx'))
+```
+
+That downloads the latest release and installs it as an add-on, so `replay`, `noisegen`, and `unpack` are on your path in every session afterwards.  Run the same command again later to upgrade in place; it replaces the installed version rather than adding a second copy.
+
+To remove it, run `matlab.addons.uninstall('uwa-channels')`, or use **Home > Add-Ons > Manage Add-Ons**.
+
+You can also download `uwa-channels.mltbx` from the [latest release](https://github.com/uwa-channels/matlab/releases/latest) and double-click it.
+
+Requires R2021a or later with the [Signal Processing Toolbox](https://www.mathworks.com/products/signal.html).
+
+### From a clone, and for Octave
+
+If you want to read or modify the source, or if you are running Octave (which cannot read `.mltbx` files), add the repository folders to the search path instead of installing the packaged toolbox:
+
+```bash
+git clone https://github.com/uwa-channels/matlab.git
+cd matlab
+```
+
+Then, from that folder, in MATLAB or Octave:
+
+```matlab
+install
+```
+
+This adds `src` and `examples` to the search path and saves the path so they stay available in later sessions.  Because you are then running the working copy directly, edits to `src` take effect immediately.
+
+Under Octave this needs version 9.0 or later with the [`signal`](https://gnu-octave.github.io/packages/signal/) and [`statistics`](https://gnu-octave.github.io/packages/statistics/) packages.
+
+Do not use both routes at once: if the packaged add-on is installed and you also run `install`, both copies are on the path and the one that wins depends on path order.  Run `matlab.addons.uninstall('uwa-channels')` first if you are switching to a clone.
+
 ## Quick start
 
-Download the channel MAT-files from [here](https://zenodo.org/records/19643731) and place them where MATLAB®/Octave can find them.
+Download the channel MAT-files from [Zenodo](https://doi.org/10.5281/zenodo.21287414) and place them where MATLAB®/Octave can find them.
 
 ### Replay and noise generation
 

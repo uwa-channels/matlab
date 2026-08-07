@@ -1,0 +1,88 @@
+name: Release
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: write
+env:
+  MLM_LICENSE_TOKEN: ${{ secrets.MLM_LICENSE_TOKEN }}
+jobs:
+  mltbx:
+    name: Package toolbox
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+            file_version=$(tr -d '[:space:]' < VERSION)
+            if [ "$version" != "$file_version" ]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match VERSION file ($file_version)." >&2
+              exit 1
+            fi
+          else
+            version=$(tr -d '[:space:]' < VERSION)
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build .mltbx
+        uses: matlab-actions/run-command@v2
+        with:
+          command: addpath('packaging'); buildToolbox('${{ steps.version.outputs.version }}')
+
+      - name: Verify the package installs and the functions run
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            mltbx = fullfile(pwd, 'build', 'uwa-channels-${{ steps.version.outputs.version }}.mltbx');
+            tbx = matlab.addons.install(mltbx);
+            disp(tbx);
+            assert(~isempty(which('replay')), 'replay is not on the path after install');
+            assert(~isempty(which('noisegen')), 'noisegen is not on the path after install');
+            assert(~isempty(which('unpack')), 'unpack is not on the path after install');
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uwa-channels-mltbx
+          path: build/*.mltbx
+
+      # Publishes two assets: uwa-channels-<version>.mltbx for the archive, and
+      # uwa-channels.mltbx under the fixed name that
+      # /releases/latest/download/uwa-channels.mltbx resolves to.  The second
+      # one is what makes the documented install command version-independent.
+      - name: Publish the GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" build/*.mltbx --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" build/*.mltbx \
+              --title "${GITHUB_REF_NAME}" --generate-notes
+          fi
+
+      # Runs the exact command the README tells users to run, against the
+      # freshly published release, so a broken install path fails the release
+      # instead of reaching users.
+      - name: Verify the documented one-line install
+        if: github.ref_type == 'tag'
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            url = 'https://github.com/${{ github.repository }}/releases/latest/download/uwa-channels.mltbx';
+            tbx = matlab.addons.install(websave([tempname '.mltbx'], url));
+            fprintf('installed %s %s\n', tbx.Name, tbx.Version);
+            assert(strcmp(tbx.Version, '${{ steps.version.outputs.version }}'), ...
+                'The latest release serves version %s, expected ${{ steps.version.outputs.version }}', tbx.Version);
+            assert(~isempty(which('replay')), 'replay is not on the path after install');

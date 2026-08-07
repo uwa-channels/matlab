@@ -14,9 +14,6 @@ clc;
 clear;
 close all;
 
-%% Add the toolbox to the path
-addpath('../src');
-
 %% Load channel impulse responses
 channel = load('blue_1.mat');
 % channel = rmfield(channel, 'theta_hat');
@@ -42,8 +39,5 @@ figure
 imagesc(delay_axis*1e3, time_axis, 20*log10(squeeze(abs(unpacked(:, 1, :))).'), [-30, 0])
 xlabel('Delay [ms]')
 ylabel('Time [s]')
-
-%% Remove the toolbox from the path
-rmpath('../src')
 
 % [EOF]
