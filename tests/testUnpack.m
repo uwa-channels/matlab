@@ -24,6 +24,10 @@ classdef testUnpack < matlab.unittest.TestCase
   %
   % Revision history:
   %   - Feb. 27, 2026: Initial release.
+  %   - Sep. 16, 2026: Added testFResampRampOrigin and testFResampRampRate.
+  %                    The parameterized test above draws pictures and
+  %                    asserts nothing, so the f_resamp cases in it passed
+  %                    while the ramp started one sample late.
 
   properties (Constant)
     c = 1500;
@@ -296,6 +300,98 @@ classdef testUnpack < matlab.unittest.TestCase
       grid on;
 
       sgtitle(p.label, 'Interpreter', 'none');
+    end
+
+    function testFResampRampOrigin(testCase)
+      % The f_resamp phase ramp must start at zero.
+      %
+      % unpack builds the ramp on the grid t_orig = (0:N_phi-1)/fs_delay, so
+      % sample n of the trajectory is at (n-1)/fs_delay and the ramp is zero
+      % at t = 0.  Building it on (1:N_phi) instead puts a constant phase
+      % rotation, and through phase_drift a constant delay offset, on every
+      % unpacked tap -- which is what this checks for.
+      %
+      % The assertion compares the same channel unpacked with and without
+      % f_resamp at the first output sample.  Both runs share one h_resampled,
+      % so resampling transients cancel exactly and the only thing left is the
+      % phase and drift that f_resamp contributes, which at t = 0 is nothing.
+
+      fc = 15e3; fs_delay = 16e3; fs_time = 100; fs_out = 160;
+      L = 128; N_time = 200;
+      excess = 1e-3;                       % 1/f_resamp - 1
+      f_resamp = 1 / (1 + excess);
+
+      % A static channel: a handful of taps, identical in every snapshot.
+      taps = zeros(L, 1);
+      taps([5, 19, 44, 77]) = [1; 0.6 - 0.3j; -0.4 + 0.2j; 0.15j];
+      h_hat = repmat(taps, [1, 1, N_time]);
+
+      channel = struct();
+      channel.h_hat = h_hat;
+      channel.version = 1.0;
+      channel.params = struct('fs_delay', fs_delay, 'fs_time', fs_time, 'fc', fc);
+
+      u0 = unpack(fs_out, 1, channel, 0.3, 0.3);
+      channel.f_resamp = f_resamp;
+      u1 = unpack(fs_out, 1, channel, 0.3, 0.3);
+
+      first0 = squeeze(u0(:, 1, 1));
+      first1 = squeeze(u1(:, 1, 1));
+      scale = norm(first0);
+      testCase.verifyGreaterThan(scale, 0, ...
+        'The test channel unpacked to nothing; the fixture is wrong.');
+
+      % What the wrong origin would have done, as a yardstick: a rotation by
+      % one sample of the ramp.  The tolerance sits three orders of magnitude
+      % below it, and well above floating point.
+      wrong = abs(exp(1j * excess * 2 * pi * fc / fs_delay) - 1);
+      testCase.verifyLessThan(norm(first1 - first0) / scale, wrong / 1e3, ...
+        sprintf(['The f_resamp ramp does not start at zero: the first ', ...
+        'output sample moves by %.2e of its norm when f_resamp is added, ', ...
+        'against %.2e for a ramp built one sample in.'], ...
+        norm(first1 - first0) / scale, wrong));
+    end
+
+    function testFResampRampRate(testCase)
+      % ... and it must then advance at (1/f_resamp - 1) * 2*pi*fc per second.
+      %
+      % Measured on the sum over the delay axis, which is the zero-frequency
+      % point of the delay response and so is unchanged by the delay drift
+      % f_resamp also applies.  excess is kept small enough that the drift
+      % stays well inside one sample over the record, so nothing leaves the
+      % delay window.
+
+      fc = 15e3; fs_delay = 16e3; fs_time = 100; fs_out = 160;
+      L = 128; N_time = 500;
+      excess = 2e-6;
+      f_resamp = 1 / (1 + excess);
+
+      taps = zeros(L, 1);
+      taps([21, 40, 63]) = [1; 0.5 - 0.2j; 0.25 + 0.1j];
+      h_hat = repmat(taps, [1, 1, N_time]);
+
+      channel = struct();
+      channel.h_hat = h_hat;
+      channel.version = 1.0;
+      channel.params = struct('fs_delay', fs_delay, 'fs_time', fs_time, 'fc', fc);
+
+      u0 = unpack(fs_out, 1, channel, 0.3, 0.3);
+      channel.f_resamp = f_resamp;
+      u1 = unpack(fs_out, 1, channel, 0.3, 0.3);
+
+      g0 = squeeze(sum(u0(:, 1, :), 1));
+      g1 = squeeze(sum(u1(:, 1, :), 1));
+      keep = abs(g0) > 0.1 * max(abs(g0));       % skip the resample ramp-up
+      t = (0:numel(g0) - 1).' / fs_out;
+
+      measured = angle(g1(keep) ./ g0(keep));
+      predicted = excess * 2 * pi * fc * t(keep);
+      residual = angle(exp(1j * (measured - predicted)));   % wrap-safe
+
+      testCase.verifyLessThan(max(abs(residual)), 1e-3, ...
+        sprintf(['The f_resamp phase ramp advances at the wrong rate: ', ...
+        'worst residual %.2e rad against a total ramp of %.3f rad.'], ...
+        max(abs(residual)), predicted(end)));
     end
 
   end

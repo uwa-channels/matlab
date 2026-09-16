@@ -53,6 +53,12 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 %                    extrapolation by clamping out-of-range values to zero;
 %                    replaced resample with interp1 (pchip) for phase and
 %                    drift to eliminate FIR edge-effect ripples.
+%   - Sep. 16, 2026: Fixed the origin of the f_resamp phase ramp.  It was
+%                    built on (1:N_phi) while t_orig, the grid it is then
+%                    interpolated from, is (0:N_phi-1)/fs_delay, so the ramp
+%                    started one sample of fs_delay in.  That put a constant
+%                    phase rotation, and through phase_drift a constant delay
+%                    offset, on every unpacked tap.
 %
 
 %% Unpacking variables
@@ -82,8 +88,10 @@ if isfield(channel, 'phi_hat')
 end
 
 if isfield(channel, 'f_resamp')
+  % Sample n of the trajectory is at (n-1)/fs_delay, the grid t_orig below
+  % is built on, so the ramp has to start at zero and not at one sample in.
   f_resamp_phase = (1 / channel.f_resamp - 1) * 2 * pi * fc ...
-    * (1:N_phi) / fs_delay;
+    * (0:N_phi-1) / fs_delay;
   phase_all = phase_all + f_resamp_phase;
   phase_drift = phase_drift + f_resamp_phase;
 end
