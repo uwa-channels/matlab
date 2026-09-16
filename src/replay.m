@@ -45,6 +45,13 @@ function output = replay(input, fs, array_index, channel, varargin)
 %   - Jul.  7, 2026: Removed normalization from replay.m.
 %   - Jul.  8, 2026: Vectorized the time-varying convolution (sum over the
 %                    L filter taps instead of a per-sample dot product).
+%   - Sep. 16, 2026: Fixed a one-sample offset between the impulse response
+%                    and the phase trajectory that multiplies it.  h_hat was
+%                    interpolated onto (start + 0:N-1)/fs_delay while the
+%                    phase came from phi_hat(start : start+N-1), whose samples
+%                    sit at (start-1 : start+N-2)/fs_delay, so every output
+%                    sample carried a phase one sample of fs_delay too early.
+%                    unpack.m already used the correct origin.
 %
 
 %% Simple checks
@@ -76,7 +83,10 @@ end
 output = zeros(T+buffer+L, M);
 baseband = [zeros(L-1, 1); baseband; zeros(L-1, 1)];
 channel_time = (0:size(channel.h_hat, 3) - 1) ./ fs_time;
-signal_time = ((0:T + L + buffer - 1) + start) ./ fs_delay;
+% phi_hat(:, n) is the trajectory at time (n-1)/fs_delay, the same origin
+% channel_time uses for h_hat and the same one unpack.m assumes, so the
+% samples starting at index `start` sit at (start-1)/fs_delay onwards.
+signal_time = ((0:T + L + buffer - 1) + start - 1) ./ fs_delay;
 N = T + L - 1;
 for m = 1:M
     h_hat_m = flip(squeeze(channel.h_hat(:, array_index(m), :)).', 2);
