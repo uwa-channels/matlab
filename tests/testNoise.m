@@ -43,6 +43,8 @@ classdef testNoise < matlab.unittest.TestCase
   %   - Feb. 27, 2026: Initial release.
   %   - Mar.  9, 2026: Unified noise struct. Synthetic beta modeled
   %                     on real experimental data.
+  %   - Oct. 15, 2026: Exact mixing checks: transpose, time direction,
+  %                     array_index mapping, SaS scale, resampling.
 
   properties (Constant)
     fs = 48000;
@@ -503,6 +505,133 @@ classdef testNoise < matlab.unittest.TestCase
         'Correlation should decay with element separation');
     end
 
+    %% ============================================================
+    %  Mixing structure: exact checks with small hand-built beta
+    % =============================================================
+    %
+    % The tests above use make_noise_struct, whose beta is nearly
+    % symmetric in (i, j) and is compared through normalized
+    % correlation.  Those tests cannot see a transposed beta, a
+    % reversed time direction, a wrong array_index mapping, or the
+    % scale of the alpha-stable drivers.  Each test below is built so
+    % that one of these errors moves the result outside its tolerance.
+
+    function testMixing_covariance_is_not_transposed(testCase)
+      % Zero-lag covariance equals sum_k B_k B_k^T, not sum_k B_k^T B_k.
+      % The raw covariance is compared, not the correlation coefficient,
+      % so the scale of beta is checked too.
+      beta = make_beta(3, 4);
+      w = mix(200000, beta, 1:3, testCase.fs, testCase.fs, 2, 11);
+      C = cov(w);
+      R0 = zeros(3);
+      R0_transposed = zeros(3);
+      for k = 1:4
+        R0 = R0 + beta(:, :, k) * beta(:, :, k).';
+        R0_transposed = R0_transposed + beta(:, :, k).' * beta(:, :, k);
+      end
+
+      err = norm(C - R0, 'fro') / norm(R0, 'fro');
+      err_transposed = norm(C - R0_transposed, 'fro') / norm(R0, 'fro');
+      testCase.verifyLessThan(err, 0.05, ...
+        sprintf('Covariance mismatch: relative error %.4f', err));
+      testCase.verifyGreaterThan(err_transposed, 0.5, ...
+        'Test beta cannot distinguish a transpose');
+    end
+
+    function testMixing_runs_forward_in_time(testCase)
+      % Lag-1 cross-covariance pins the direction of time.
+      %
+      % The generator mixes forward, w_i(n) = sum_{j,k} beta_ij(k) eta_j(n + k),
+      % the convention under which NoiseModels.jl estimates beta.  Then
+      % E[w(n) w(n+1)^T] = sum_k B_{k+1} B_k^T.  Mixing backward,
+      % eta_j(n - k), gives the transpose.  The zero-lag covariance is the
+      % same either way.
+      beta = make_beta(3, 4);
+      w = mix(200000, beta, 1:3, testCase.fs, testCase.fs, 2, 11);
+      R1 = w(1:end-1, :).' * w(2:end, :) / (size(w, 1) - 1);
+      forward = zeros(3);
+      for k = 1:3
+        forward = forward + beta(:, :, k+1) * beta(:, :, k).';
+      end
+      backward = forward.';
+
+      err = norm(R1 - forward, 'fro') / norm(forward, 'fro');
+      err_backward = norm(R1 - backward, 'fro') / norm(forward, 'fro');
+      testCase.verifyLessThan(err, 0.05, ...
+        sprintf('Lag-1 covariance mismatch: relative error %.4f', err));
+      testCase.verifyGreaterThan(err_backward, 0.5, ...
+        'Test beta cannot distinguish the time direction');
+    end
+
+    function testMixing_subset_equals_slice(testCase)
+      % With the same seed, a subset of array_index is the matching
+      % columns of the full draw, in the order requested.
+      beta = make_beta(4, 3);
+      w_all = mix(500, beta, 1:4, testCase.fs, testCase.fs, 2, 3);
+      w_sub = mix(500, beta, [3, 1], testCase.fs, testCase.fs, 2, 3);
+      testCase.verifyEqual(w_sub, w_all(:, [3, 1]), 'AbsTol', 1e-12);
+    end
+
+    function testMixing_array_index_selects_element(testCase)
+      % Elements with powers 1, 1e2 and 1e4 show which one array_index
+      % picked.
+      beta = zeros(3, 3, 1);
+      for i = 1:3
+        beta(i, i, 1) = 10^(i-1);
+      end
+      w = mix(50000, beta, [3, 1], testCase.fs, testCase.fs, 2, 5);
+      p = mean(w.^2, 1);
+      testCase.verifyTrue(p(1) > 0.5e4 && p(1) < 2e4, ...
+        sprintf('array_index 3 gave power %.3g, expected 1e4', p(1)));
+      testCase.verifyTrue(p(2) > 0.5 && p(2) < 2, ...
+        sprintf('array_index 1 gave power %.3g, expected 1', p(2)));
+    end
+
+    function testMixing_sas_characteristic_function(testCase)
+      % Identity mixing gives SaS noise with scale 1/sqrt(2), whose
+      % characteristic function is exp(-|t / sqrt(2)|^alpha).
+      %
+      % Unlike kurtosis, which is infinite for alpha < 2, the empirical
+      % characteristic function is bounded; its standard error here is
+      % < 0.003.
+      beta = reshape(eye(2), 2, 2, 1);
+      for alpha = [1.2, 1.5, 1.9]
+        w = mix(100000, beta, 1:2, testCase.fs, testCase.fs, alpha, 9);
+        for t = [0.5, 1, 2]
+          phi = mean(cos(t * w), 'all');
+          expected = exp(-abs(t / sqrt(2))^alpha);
+          testCase.verifyEqual(phi, expected, 'AbsTol', 0.01, ...
+            sprintf('alpha=%.1f, t=%.1f: E[cos(tw)] = %.4f, expected %.4f', ...
+            alpha, t, phi, expected));
+        end
+      end
+    end
+
+    function testMixing_resampling_changes_content(testCase)
+      % Resampling changes the lag-1 autocorrelation, not only the length.
+      %
+      % Measured at Fs = 48 kHz the lag-1 autocorrelation is 0.47;
+      % upsampling to 96 kHz raises it to 0.83 and downsampling to 24 kHz
+      % lowers it to 0.27.
+      beta = make_beta(2, 3);
+      r1 = @(x) sum(x(1:end-1) .* x(2:end)) / sum(x.^2);
+
+      fs_out = [24000, 48000, 96000];
+      r = zeros(size(fs_out));
+      for n = 1:length(fs_out)
+        w = mix(100000, beta, 1:2, fs_out(n), testCase.fs, 2, 5);
+        testCase.verifySize(w, [100000, 2]);
+        testCase.verifyTrue(all(isfinite(w), 'all'));
+        r(n) = r1(w(:, 1));
+      end
+      testCase.verifyTrue(r(2) > 0.4 && r(2) < 0.55, ...
+        sprintf('lag-1 at the measured rate: %.3f', r(2)));
+      testCase.verifyGreaterThan(r(3), 0.7, ...
+        sprintf('lag-1 at 96 kHz: %.3f', r(3)));
+      testCase.verifyLessThan(r(1), 0.35, ...
+        sprintf('lag-1 at 24 kHz: %.3f', r(1)));
+    end
+
   end
 end
 
@@ -587,6 +716,22 @@ noise.rms_power = rms_power;
 noise.version = 1.0;
 end
 
+
+function beta = make_beta(M, K)
+% Mixing coefficients that are asymmetric in (i, j) and vary with lag k,
+% so that beta and its transpose (in i, j or in k) give different
+% statistics.
+[i, j, k] = ndgrid(1:M, 1:M, 1:K);
+beta = cos(1.3*i + 0.7*j + 0.5*k) ./ k;
+end
+
+function w = mix(n, beta, array_index, fs, Fs, alpha, seed)
+% Seed the RNG and draw N samples of mixing noise from a minimal noise
+% struct around BETA.
+noise = struct('Fs', Fs, 'alpha', alpha, 'beta', beta, 'version', 1.0);
+rng(seed);
+w = noisegen([n, length(array_index)], fs, array_index, noise);
+end
 
 function k = kurtosis(x)
 x = x(:);
