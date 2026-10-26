@@ -1,6 +1,7 @@
 [![CI](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml/badge.svg)](https://github.com/uwa-channels/matlab/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/uwa-channels/matlab/graph/badge.svg?token=NQ1M28NGYM)](https://codecov.io/gh/uwa-channels/matlab)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21287414-1682D4?logo=zenodo&logoColor=white)](https://doi.org/10.5281/zenodo.21287414)
+[![arXiv](https://img.shields.io/badge/arXiv-2609.03207-B31B1B?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2609.03207)
 [![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=uwa-channels/matlab)
 
 
