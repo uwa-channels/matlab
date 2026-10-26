@@ -1,0 +1,114 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite the paper below.  If you use the
+  channel impulse responses or the noise statistics, please also cite the
+  Zenodo dataset listed under references.
+type: software
+title: "Underwater Acoustic Channel Toolbox (MATLAB/Octave)"
+abstract: >-
+  MATLAB/Octave toolbox for replaying signals through measured underwater acoustic channels, generating realistic ocean noise, and unpacking stored impulse responses.
+authors:
+  - family-names: "Li"
+    given-names: "Zhengnan"
+    affiliation: "University of Alabama"
+    orcid: "https://orcid.org/0000-0002-3409-7942"
+repository-code: "https://github.com/uwa-channels/matlab"
+url: "https://uwa-channels.github.io"
+license: MIT
+version: "1.0.0"
+keywords:
+  - "underwater acoustics"
+  - "underwater acoustic communication"
+  - "channel modeling"
+  - "channel replay"
+  - "matlab"
+  - "octave"
+identifiers:
+  - type: doi
+    value: "10.48550/arXiv.2609.03207"
+    description: "The arXiv paper describing the library"
+  - type: doi
+    value: "10.5281/zenodo.21287414"
+    description: "The channel and noise files on Zenodo"
+preferred-citation:
+  type: article
+  title: "Underwater Acoustic Channel Library"
+  authors:
+    - family-names: "Li"
+      given-names: "Zhengnan"
+      affiliation: "University of Alabama"
+      orcid: "https://orcid.org/0000-0002-3409-7942"
+    - family-names: "Chitre"
+      given-names: "Mandar"
+      affiliation: "National University of Singapore"
+      orcid: "https://orcid.org/0000-0001-6243-7871"
+    - family-names: "Cuji"
+      given-names: "Diego A."
+      affiliation: "Stony Brook University"
+      orcid: "https://orcid.org/0000-0002-0986-3801"
+    - family-names: "Preisig"
+      given-names: "James"
+      affiliation: "JPAnalytics LLC"
+      orcid: "https://orcid.org/0000-0002-7066-8474"
+    - family-names: "Singer"
+      given-names: "Andrew C."
+      affiliation: "Stony Brook University"
+      orcid: "https://orcid.org/0000-0001-9926-7036"
+    - family-names: "Stojanovic"
+      given-names: "Milica"
+      affiliation: "Northeastern University"
+      orcid: "https://orcid.org/0000-0002-9127-9638"
+    - family-names: "Walree"
+      name-particle: "van"
+      given-names: "Paul"
+      affiliation: "Norwegian Defence Research Establishment"
+      orcid: "https://orcid.org/0000-0001-5757-8768"
+  year: 2026
+  month: 9
+  journal: "arXiv"
+  identifiers:
+    - type: other
+      value: "arXiv:2609.03207"
+  doi: "10.48550/arXiv.2609.03207"
+  url: "https://arxiv.org/abs/2609.03207"
+references:
+  - type: data
+    title: "Underwater Acoustic Channel Repository"
+    authors:
+      - family-names: "Li"
+        given-names: "Zhengnan"
+        affiliation: "University of Alabama"
+        orcid: "https://orcid.org/0000-0002-3409-7942"
+      - family-names: "Chitre"
+        given-names: "Mandar"
+        affiliation: "National University of Singapore"
+        orcid: "https://orcid.org/0000-0001-6243-7871"
+      - family-names: "Cuji"
+        given-names: "Diego A."
+        affiliation: "Stony Brook University"
+        orcid: "https://orcid.org/0000-0002-0986-3801"
+      - family-names: "Preisig"
+        given-names: "James"
+        affiliation: "JPAnalytics LLC"
+        orcid: "https://orcid.org/0000-0002-7066-8474"
+      - family-names: "Singer"
+        given-names: "Andrew C."
+        affiliation: "Stony Brook University"
+        orcid: "https://orcid.org/0000-0001-9926-7036"
+      - family-names: "Stojanovic"
+        given-names: "Milica"
+        affiliation: "Northeastern University"
+        orcid: "https://orcid.org/0000-0002-9127-9638"
+      - family-names: "Walree"
+        name-particle: "van"
+        given-names: "Paul"
+        affiliation: "Norwegian Defence Research Establishment"
+        orcid: "https://orcid.org/0000-0001-5757-8768"
+    version: "1.0"
+    date-released: "2026-08-01"
+    year: 2026
+    publisher:
+      name: "Zenodo"
+    doi: "10.5281/zenodo.21287414"
+    url: "https://doi.org/10.5281/zenodo.21287414"
+    license: CC-BY-4.0
