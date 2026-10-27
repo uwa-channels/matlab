@@ -16,8 +16,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # Pinned: from R2026b, ToolboxOptions accepts only a UUID identifier,
+      # and buildToolbox.m keeps the readable identifier "uwa-channels" that
+      # installed copies upgrade in place under.
       - name: Set up MATLAB
         uses: matlab-actions/setup-matlab@v2
+        with:
+          release: R2026a
 
       - name: Resolve version
         id: version
