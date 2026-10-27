@@ -59,6 +59,8 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 %                    started one sample of fs_delay in.  That put a constant
 %                    phase rotation, and through phase_drift a constant delay
 %                    offset, on every unpacked tap.
+%   - Oct. 27, 2026: phi_hat takes precedence over theta_hat when a file
+%                    carries both, as in replay.m; their phases used to add.
 %
 
 %% Unpacking variables
@@ -78,13 +80,14 @@ N_phi = ceil(T * fs_delay / fs_time);
 phase_all = zeros(length(array_index), N_phi);
 phase_drift = zeros(length(array_index), N_phi);
 
-if isfield(channel, 'theta_hat')
-    phase_all = phase_all + channel.theta_hat(array_index, :);
-end
-
+% phi_hat is the whole tracked phase (est.m saves its one trajectory as
+% phi_hat with delay tracking and as theta_hat without), so it takes
+% precedence over theta_hat, as in replay.m.
 if isfield(channel, 'phi_hat')
     phase_all = phase_all + channel.phi_hat(array_index, :);
     phase_drift = phase_drift + channel.phi_hat(array_index, :);
+elseif isfield(channel, 'theta_hat')
+    phase_all = phase_all + channel.theta_hat(array_index, :);
 end
 
 if isfield(channel, 'f_resamp')

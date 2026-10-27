@@ -52,6 +52,13 @@ function output = replay(input, fs, array_index, channel, varargin)
 %                    sit at (start-1 : start+N-2)/fs_delay, so every output
 %                    sample carried a phase one sample of fs_delay too early.
 %                    unpack.m already used the correct origin.
+%   - Oct. 27, 2026: The delay drift is reinserted relative to the starting
+%                    sample.  phi_hat accumulates over the whole record, and
+%                    its absolute value, up to hundreds of samples, shifted a
+%                    late replay so far that the end of the signal was cut
+%                    off.  The fixed 20-sample buffer is replaced by one
+%                    sized to the largest delay in the window, so the output
+%                    length matches the Python package.
 %
 
 %% Simple checks
@@ -71,12 +78,23 @@ baseband = resample(baseband, p, q);
 T = length(baseband);
 
 %% Assign random start point in time (for reproducibility only)
-buffer = 20; % extra buffer for extrapolation
 T_max = size(channel.h_hat, 3) / fs_time * fs_delay;
 if nargin ~= 5
-    start = randi([1, T_max - T - L - buffer - 1]);
+    start = randi([1, T_max - T - L]);
 else
     start = varargin{end};
+end
+
+%% Room for the delay drift
+% phi_hat accumulates over the whole record, so the drift is taken relative
+% to the starting sample: the output starts aligned with the input wherever
+% in the channel it starts.  A negative drift delays the signal, so the
+% output gets enough extra samples to hold the largest delay in the window.
+buffer = 0;
+if isfield(channel, 'phi_hat')
+    phi_window = channel.phi_hat(array_index, start:start+T+L-1);
+    phi_window = phi_window - phi_window(:, 1);
+    buffer = max(0, ceil(-min(phi_window, [], 'all') / (2 * pi * fc) * fs_delay));
 end
 
 %% Convolution and insert the drift
@@ -99,10 +117,13 @@ for m = 1:M
     end
 
     if isfield(channel, 'phi_hat')
-        phase = exp(1j * channel.phi_hat(array_index(m), start:start+N-1)).';
+        phi_m = channel.phi_hat(array_index(m), :);
+        phi_m = phi_m - phi_m(start);
+        phase = exp(1j * phi_m(start:start+N-1)).';
         output(1:N, m) = conv_out .* phase;
-        % Insert the drift
-        drift = channel.phi_hat(array_index(m), (0:T + L + buffer - 1)+start) ./ (2 * pi * fc);
+        % Insert the drift. Past the end of phi_hat, hold its last value.
+        idx = min((0:T + L + buffer - 1) + start, numel(phi_m));
+        drift = phi_m(idx) ./ (2 * pi * fc);
         output(:, m) = interp1(signal_time, output(:, m), signal_time+drift, 'spline', 0);
     elseif isfield(channel, 'theta_hat')
         phase = exp(1j * channel.theta_hat(array_index(m), start:start+N-1)).';

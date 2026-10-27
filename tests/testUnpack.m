@@ -394,6 +394,34 @@ classdef testUnpack < matlab.unittest.TestCase
                 max(abs(residual)), predicted(end)));
         end
 
+        function testPhiHatTakesPrecedence(testCase)
+            % A channel carrying both phi_hat and theta_hat unpacks as with
+            % phi_hat alone.
+            %
+            % est saves its one phase trajectory as phi_hat with delay
+            % tracking and as theta_hat without, so phi_hat is already the
+            % whole phase and adding theta_hat would count the phase twice.
+            % replay uses phi_hat alone too.
+
+            fc = 15e3; fs_delay = 16e3; fs_time = 100; fs_out = 160;
+            L = 128; N_time = 200;
+            taps = zeros(L, 1);
+            taps([21, 40, 63]) = [1; 0.5 - 0.2j; 0.25 + 0.1j];
+
+            channel = struct();
+            channel.h_hat = repmat(taps, [1, 1, N_time]);
+            channel.version = 1.0;
+            channel.params = struct('fs_delay', fs_delay, 'fs_time', fs_time, 'fc', fc);
+            t = (0:ceil(N_time * fs_delay / fs_time) - 1) / fs_delay;
+            channel.phi_hat = -2 * pi * fc * 1e-5 * t;
+            u_phi = unpack(fs_out, 1, channel, 0.3, 0.3);
+            channel.theta_hat = 0.7 * sin(2 * pi * 0.5 * t);
+            u_both = unpack(fs_out, 1, channel, 0.3, 0.3);
+
+            testCase.verifyEqual(u_both, u_phi, ['theta_hat changed the ', ...
+                'unpacked channel although phi_hat is present.']);
+        end
+
     end
 end
 

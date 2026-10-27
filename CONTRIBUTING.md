@@ -40,13 +40,13 @@ A structure with the following scalar fields:
 
 ## Phase/delay tracking fields (optional)
 
-`phi_hat`, `theta_hat`, and `f_resamp` may coexist; `replay` applies them according to the following precedence:
+`phi_hat`, `theta_hat`, and `f_resamp` may coexist; `replay` and `unpack` apply them according to the following precedence:
 
 * If none of the three is present, no Doppler correction is applied.
 * `phi_hat` takes precedence over `theta_hat`: if `phi_hat` is present, it is used and `theta_hat` is ignored; if only `theta_hat` is present, it is used instead.
 * `f_resamp` (see [Optional fields](#optional-fields)) is applied independently of the two phase/delay fields, whether or not either of them is present.
 
-`unpack` differs when both phase fields are present: it adds the phases of `theta_hat` and `phi_hat`, and takes the delay drift from `phi_hat` alone. Each released file carries only one of the two, so the difference matters only for files you create.
+The estimation scripts save their one tracked phase as `phi_hat` with delay tracking and as `theta_hat` without, so a file normally carries only one of the two; `phi_hat` is the whole phase, which is why it wins.
 
 ### `phi_hat` (delay tracking)
 
@@ -62,6 +62,8 @@ A structure with the following scalar fields:
   $$\bar v_{\text{r}}(nT_s) = \mathcal{I}\left[\bar y_{\text{r}}\left(nT_s + \frac{\hat\varphi(nT_s)}{2\pi f_c}\right)\right]$$
 
   where $\mathcal{I}[\cdot]$ denotes interpolation, implemented here as spline interpolation.
+
+  `phi_hat` accumulates over the whole record, so its absolute value can reach hundreds of samples of delay. `replay` therefore reinserts it relative to the starting sample, $\hat\varphi(nT_s) - \hat\varphi(n_0T_s)$ for a replay that starts at sample $n_0$: the output starts aligned with the input wherever in the channel the replay starts, and it is padded by the largest delay the drift reaches within the replay.
 
 ### `theta_hat` (phase tracking only)
 

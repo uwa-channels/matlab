@@ -495,11 +495,110 @@ classdef testReplay < matlab.unittest.TestCase
 
             %% 6. Check 2: per-channel output power is O(1)
             mean_var = mean(var(r_all));
-            fprintf('testReplayPower: per-channel output power mean = %.3f\n', mean_var);
+            % fprintf('testReplayPower: per-channel output power mean = %.3f\n', mean_var);
             testCase.verifyGreaterThan(mean_var, 0.93, ...
                 sprintf('Mean output power %.3f is unexpectedly small.', mean_var));
             testCase.verifyLessThan(mean_var, 1.07, ...
                 sprintf('Mean output power %.3f is unexpectedly large.', mean_var));
+        end
+
+        function testLateStartKeepsTheEnd(testCase)
+            % A replay late in a drifting channel must not lose either end
+            % of the input, whichever way the delay drifts.
+            %
+            % phi_hat accumulates over the whole record, so late in a channel
+            % whose delay drifts steadily its absolute value is large.  replay
+            % reinserts the drift relative to the starting sample;
+            % reinserting the absolute drift shifted the output by all of it,
+            % which cut off the end of the signal when the delay grows
+            % (receding) and its beginning when it shrinks (closing).  The
+            % delay here drifts by 2 ms per second, so 15 s in it is 30 ms,
+            % against 1 ms of change across the 0.5 s input.  A burst at each
+            % end of the input must survive.
+
+            fs = 96e3; fc = 13e3; fs_delay = 8e3;
+            x = zeros(0.5 * fs, 1);
+            b = 0.005 * fs;
+            burst = cos(2 * pi * fc * (0:b-1).' / fs);
+            x(1:b) = burst;
+            x(end-b+1:end) = burst;
+
+            for rate = [2e-3, -2e-3]   % receding, closing
+                channel = drift_channel(fc, fs_delay, 400, 64, rate);
+                early = replay(x, fs, 1, channel, 1001);
+                late = replay(x, fs, 1, channel, 15 * fs_delay + 1);
+
+                ratio = sum(late.^2) / sum(early.^2);
+                testCase.verifyGreaterThan(ratio, 0.9, sprintf(['Delay rate ', ...
+                    '%+g: a replay 15 s in carries %.2f of the energy of one ', ...
+                    'at the start; part of the signal was cut off.'], rate, ratio));
+                testCase.verifyLessThan(ratio, 1.1);
+                w = 0.05 * fs;
+                head = sum(late(1:w).^2) / sum(late.^2);
+                tail = sum(late(end-w+1:end).^2) / sum(late.^2);
+                testCase.verifyGreaterThan(head, 0.3, sprintf(['Delay rate ', ...
+                    '%+g: the burst at the start of the input is missing ', ...
+                    '(%.2f).'], rate, head));
+                testCase.verifyGreaterThan(tail, 0.3, sprintf(['Delay rate ', ...
+                    '%+g: the burst at the end of the input is missing ', ...
+                    '(%.2f).'], rate, tail));
+            end
+        end
+
+        function testOutputLength(testCase)
+            % The output is T + L samples at fs_delay, T the input length at
+            % fs_delay and L the number of taps, plus, with phi_hat, room for
+            % the largest delay the drift reaches in the replay window,
+            % measured from the starting sample.  The Python package returns
+            % the same length.
+            %
+            % With a delay growing at a constant rate r, the drift after k
+            % samples is r*k samples, so the room needed is ceil(r*(T+L-1));
+            % a shrinking delay needs none, and so do theta_hat and no
+            % tracking.
+
+            fs = 96e3; fc = 13e3; fs_delay = 8e3; L = 64;
+            x = randn(0.5 * fs, 1);
+            T = ceil(numel(x) * fs_delay / fs);
+            up = fs / fs_delay;
+            rate = 2e-3;
+
+            channel = drift_channel(fc, fs_delay, 400, L, rate);
+            testCase.verifyEqual(numel(replay(x, fs, 1, channel, 1001)), ...
+                (T + L + ceil(rate * (T + L - 1))) * up, ...
+                'phi_hat, growing delay: output length');
+
+            channel = drift_channel(fc, fs_delay, 400, L, -rate);
+            testCase.verifyEqual(numel(replay(x, fs, 1, channel, 1001)), ...
+                (T + L) * up, 'phi_hat, shrinking delay: output length');
+
+            channel.theta_hat = channel.phi_hat;
+            channel = rmfield(channel, 'phi_hat');
+            testCase.verifyEqual(numel(replay(x, fs, 1, channel, 1001)), ...
+                (T + L) * up, 'theta_hat: output length');
+
+            channel = rmfield(channel, 'theta_hat');
+            testCase.verifyEqual(numel(replay(x, fs, 1, channel, 1001)), ...
+                (T + L) * up, 'no tracking: output length');
+        end
+
+        function testRandomStartStaysInRange(testCase)
+            % Without a start, replay draws one at random.  With the input
+            % nearly as long as the channel allows, the valid starts are a
+            % handful of samples, so a draw past the last one reads beyond
+            % phi_hat or h_hat and errors, and one that fell short of the
+            % first would too.
+
+            fs = 96e3; fc = 13e3; fs_delay = 8e3; fs_time = 20; L = 64;
+            N_time = 40;                                % 2 s of channel
+            channel = drift_channel(fc, fs_delay, N_time, L, 2e-3);
+            T_max = N_time / fs_time * fs_delay;
+            T = T_max - L - 5;                          % 5 valid starts
+            x = randn(T * fs / fs_delay, 1);
+            for k = 1:200
+                y = replay(x, fs, 1, channel);
+                testCase.verifyTrue(all(isfinite(y)), 'non-finite output');
+            end
         end
 
     end
@@ -507,6 +606,20 @@ end
 
 
 %% Helpers
+
+function channel = drift_channel(fc, fs_delay, N_time, L, rate)
+% A single-tap channel whose delay drifts at RATE seconds per second, held
+% as phi_hat = -2*pi*fc*rate*t, with fs_time = 20 Hz.
+fs_time = 20;
+h_hat = zeros(L, 1, N_time);
+h_hat(L/2, 1, :) = 1;
+channel = struct();
+channel.h_hat = h_hat;
+channel.version = 1.0;
+channel.params = struct('fs_delay', fs_delay, 'fs_time', fs_time, 'fc', fc);
+t = (0:N_time/fs_time*fs_delay - 1) / fs_delay;
+channel.phi_hat = -2 * pi * fc * rate * t;
+end
 
 function h = place_taps(L, M, delays, gains, Tmp, fs_delay)
 h = zeros(L, M);
