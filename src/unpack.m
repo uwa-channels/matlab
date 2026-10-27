@@ -79,30 +79,30 @@ phase_all = zeros(length(array_index), N_phi);
 phase_drift = zeros(length(array_index), N_phi);
 
 if isfield(channel, 'theta_hat')
-  phase_all = phase_all + channel.theta_hat(array_index, :);
+    phase_all = phase_all + channel.theta_hat(array_index, :);
 end
 
 if isfield(channel, 'phi_hat')
-  phase_all = phase_all + channel.phi_hat(array_index, :);
-  phase_drift = phase_drift + channel.phi_hat(array_index, :);
+    phase_all = phase_all + channel.phi_hat(array_index, :);
+    phase_drift = phase_drift + channel.phi_hat(array_index, :);
 end
 
 if isfield(channel, 'f_resamp')
-  % Sample n of the trajectory is at (n-1)/fs_delay, the grid t_orig below
-  % is built on, so the ramp has to start at zero and not at one sample in.
-  f_resamp_phase = (1 / channel.f_resamp - 1) * 2 * pi * fc ...
-    * (0:N_phi-1) / fs_delay;
-  phase_all = phase_all + f_resamp_phase;
-  phase_drift = phase_drift + f_resamp_phase;
+    % Sample n of the trajectory is at (n-1)/fs_delay, the grid t_orig below
+    % is built on, so the ramp has to start at zero and not at one sample in.
+    f_resamp_phase = (1 / channel.f_resamp - 1) * 2 * pi * fc ...
+        * (0:N_phi-1) / fs_delay;
+    phase_all = phase_all + f_resamp_phase;
+    phase_drift = phase_drift + f_resamp_phase;
 end
 
 %% Allocate buffer
 if nargin == 3
-  buffer_left = 0.1;
-  buffer_right = 0.1;
+    buffer_left = 0.1;
+    buffer_right = 0.1;
 else
-  buffer_left = varargin{1};
-  buffer_right = varargin{2};
+    buffer_left = varargin{1};
+    buffer_right = varargin{2};
 end
 
 h_hat = [zeros(ceil(K*buffer_left), M, T); h_hat; zeros(ceil(K*buffer_right), M, T)];
@@ -122,25 +122,25 @@ unpacked_channel = zeros(K, length(array_index), ceil(T*p1/q1));
 t_orig = (0:N_phi-1) ./ fs_delay;
 
 for m = 1:length(array_index)
-  h_hat_m = squeeze(h_hat(:, m, :));
-  h_resampled = resample(h_hat_m, p1, q1, 'Dimension', 2);
-  t_new = (0:size(h_resampled, 2)-1) ./ fs_time_desired;
+    h_hat_m = squeeze(h_hat(:, m, :));
+    h_resampled = resample(h_hat_m, p1, q1, 'Dimension', 2);
+    t_new = (0:size(h_resampled, 2)-1) ./ fs_time_desired;
 
-  if has_phase
-    phase_resampled = interp1(t_orig, phase_all(m, :), t_new, 'pchip', 'extrap');
-    h_resampled = h_resampled .* exp(1j * phase_resampled);
-  end
-
-  if has_drift
-    drift_resampled = interp1(t_orig, phase_drift(m, :), t_new, 'pchip', 'extrap');
-    drift = drift_resampled ./ (2 * pi * fc);
-    for t = 1:size(h_resampled, 2)
-      h_resampled(:, t) = interp1(delays, h_resampled(:, t), ...
-        delays + drift(t), 'spline', 0);
+    if has_phase
+        phase_resampled = interp1(t_orig, phase_all(m, :), t_new, 'pchip', 'extrap');
+        h_resampled = h_resampled .* exp(1j * phase_resampled);
     end
-  end
 
-  unpacked_channel(:, m, :) = h_resampled;
+    if has_drift
+        drift_resampled = interp1(t_orig, phase_drift(m, :), t_new, 'pchip', 'extrap');
+        drift = drift_resampled ./ (2 * pi * fc);
+        for t = 1:size(h_resampled, 2)
+            h_resampled(:, t) = interp1(delays, h_resampled(:, t), ...
+                delays + drift(t), 'spline', 0);
+        end
+    end
+
+    unpacked_channel(:, m, :) = h_resampled;
 end
 
 end

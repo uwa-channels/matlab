@@ -44,7 +44,8 @@ code.
   Outputs, Example, required files and toolboxes, See also, Author, Email,
   License, and a dated Revision history.  Add a line to the Revision history
   when you change the behavior of a function.
-- Two-space indentation.
+- Four-space indentation, as MATLAB's editor applies it (Smart Indent, or
+  `indentcode` from the command line).
 - Commit messages are one imperative sentence that says what changed and why,
   for example "Start the f_resamp phase ramp at zero, and test that it does".
 

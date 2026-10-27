@@ -73,19 +73,19 @@ function w = noisegen(input_size, fs, varargin)
 
 
 if nargin ~= 2
-  array_index = varargin{1};
-  noise = varargin{2};
-  validate_inputs(input_size, noise, array_index);
+    array_index = varargin{1};
+    noise = varargin{2};
+    validate_inputs(input_size, noise, array_index);
 end
 
 
 if nargin == 2
-  w = noise_pink(input_size, fs);
+    w = noise_pink(input_size, fs);
 elseif nargin == 4
-  %% Mixing-coefficient generation (Gaussian or impulsive)
-  w = noise_mixing(input_size, fs, noise, array_index);
+    %% Mixing-coefficient generation (Gaussian or impulsive)
+    w = noise_mixing(input_size, fs, noise, array_index);
 else
-  error('Wrong noise option.');
+    error('Wrong noise option.');
 end
 end
 
@@ -93,19 +93,19 @@ end
 function validate_inputs(input_size, noise, array_index)
 % Validate the noise struct and array indices.
 assert(noise.version >= 1.0, ...
-  'The minimum version of the noise matrix is 1.0, and you have %.1f.', ...
-  noise.version);
+    'The minimum version of the noise matrix is 1.0, and you have %.1f.', ...
+    noise.version);
 
 M = size(noise.beta, 1);
 
 assert(length(unique(array_index)) == length(array_index), ...
-  'array_index must contain unique entries.');
+    'array_index must contain unique entries.');
 assert(input_size(2) == length(array_index), ...
-  'input_size(2) (%d) must equal length(array_index) (%d).', ...
-  input_size(2), length(array_index));
+    'input_size(2) (%d) must equal length(array_index) (%d).', ...
+    input_size(2), length(array_index));
 assert(max(array_index) <= M, ...
-  'The largest receive channel array_index, %d, should be less than %d.', ...
-  max(array_index), M);
+    'The largest receive channel array_index, %d, should be less than %d.', ...
+    max(array_index), M);
 end
 
 
@@ -163,9 +163,9 @@ Nout = length(array_index);
 
 w = zeros(K, Nout);
 for i = 1:Nout
-  kernel = reshape(beta_sub(i, :, :), M, K_mix).';   % K_mix x M, kernel(k, j) = beta(i, j, k)
-  wi = conv2(z, rot90(kernel, 2), 'valid');          % (K+1) x 1 correlation over all input channels
-  w(:, i) = wi(1:K);
+    kernel = reshape(beta_sub(i, :, :), M, K_mix).';   % K_mix x M, kernel(k, j) = beta(i, j, k)
+    wi = conv2(z, rot90(kernel, 2), 'valid');          % (K+1) x 1 correlation over all input channels
+    w(:, i) = wi(1:K);
 end
 
 w = resample(w, p, q, 'Dimension', 1);
@@ -292,16 +292,16 @@ function x = stabrnd(alpha, beta, c, delta, m, n)
 
 % Errortraps:
 if alpha < .1 | alpha > 2
-  disp('Alpha must be in [.1,2] for function STABRND.')
-  alpha
-  x = NaN * zeros(m, n);
-  return
+    disp('Alpha must be in [.1,2] for function STABRND.')
+    alpha
+    x = NaN * zeros(m, n);
+    return
 end
 if abs(beta) > 1
-  disp('Beta must be in [-1,1] for function STABRND.')
-  beta
-  x = NaN * zeros(m, n);
-  return
+    disp('Beta must be in [-1,1] for function STABRND.')
+    beta
+    x = NaN * zeros(m, n);
+    return
 end
 
 % Generate exponential w and uniform phi:
@@ -310,38 +310,38 @@ phi = (rand(m, n) - .5) * pi;
 
 % Gaussian case (Box-Muller):
 if alpha == 2
-  x = (2 * sqrt(w) .* sin(phi));
-  x = delta + c * x;
-  return
+    x = (2 * sqrt(w) .* sin(phi));
+    x = delta + c * x;
+    return
 end
 
 % Symmetrical cases:
 if beta == 0
-  if alpha == 1 % Cauchy case
-    x = tan(phi);
-  else
-    x = ((cos((1 - alpha)*phi) ./ w).^(1 / alpha - 1) ...
-      .* sin(alpha * phi) ./ cos(phi).^(1 / alpha));
-  end
-
-  % General cases:
-else
-  cosphi = cos(phi);
-  if abs(alpha-1) > 1.e-8
-    zeta = beta * tan(pi*alpha/2);
-    aphi = alpha * phi;
-    a1phi = (1 - alpha) * phi;
-    x = ((sin(aphi) + zeta * cos(aphi)) ./ cosphi) ...
-      .* ((cos(a1phi) + zeta * sin(a1phi)) ...
-      ./ (w .* cosphi)).^((1 - alpha) / alpha);
-  else
-    bphi = (pi / 2) + beta * phi;
-    x = (2 / pi) * (bphi .* tan(phi) - beta * log((pi / 2)*w ...
-      .*cosphi./bphi));
-    if alpha ~= 1
-      x = x + beta * tan(pi * alpha/2);
+    if alpha == 1 % Cauchy case
+        x = tan(phi);
+    else
+        x = ((cos((1 - alpha)*phi) ./ w).^(1 / alpha - 1) ...
+            .* sin(alpha * phi) ./ cos(phi).^(1 / alpha));
     end
-  end
+
+    % General cases:
+else
+    cosphi = cos(phi);
+    if abs(alpha-1) > 1.e-8
+        zeta = beta * tan(pi*alpha/2);
+        aphi = alpha * phi;
+        a1phi = (1 - alpha) * phi;
+        x = ((sin(aphi) + zeta * cos(aphi)) ./ cosphi) ...
+            .* ((cos(a1phi) + zeta * sin(a1phi)) ...
+            ./ (w .* cosphi)).^((1 - alpha) / alpha);
+    else
+        bphi = (pi / 2) + beta * phi;
+        x = (2 / pi) * (bphi .* tan(phi) - beta * log((pi / 2)*w ...
+            .*cosphi./bphi));
+        if alpha ~= 1
+            x = x + beta * tan(pi * alpha/2);
+        end
+    end
 end
 
 % Finale:

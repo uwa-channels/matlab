@@ -1,508 +1,508 @@
 classdef testReplay < matlab.unittest.TestCase
-  % TESTREPLAY Unit tests for replay.m
-  %
-  % Tests {static, mobile} x {theta_hat, phi_hat, f_resamp} across various
-  % speed configurations.
-  %
-  %   theta_hat: phase tracking only. h_hat drifts with motion.
-  %   phi_hat:   phase + delay tracking. h_hat is static.
-  %   f_resamp:  bulk Doppler (Watermark). h_hat is static.
-  %     Can appear alone (tracking='none') or combined with theta/phi for
-  %     residual motion. Mirrors the convention in testUnpack Cases 6–8.
-  %
-  % Other m-files required: replay.m
-  % Subfunctions: place_taps, compensate_doppler, randsamples
-  % Toolbox required: Signal Processing Toolbox (for resample, findpeaks).
-  % MAT-files required: None.
-  %
-  % See also: replay.m, est.m
-  %
-  % Author: Zhengnan Li, Claude (Opus 4.6)
-  % Email : uwa-channels@ofdm.link
-  %
-  % License: MIT
-  %
-  % Revision history:
-  %   - Feb. 27, 2026: Initial release.
-  %   - Jul. 10, 2026: Added testReplayPower: channel-isolation and
-  %                    output-power checks for the array_index API.
+    % TESTREPLAY Unit tests for replay.m
+    %
+    % Tests {static, mobile} x {theta_hat, phi_hat, f_resamp} across various
+    % speed configurations.
+    %
+    %   theta_hat: phase tracking only. h_hat drifts with motion.
+    %   phi_hat:   phase + delay tracking. h_hat is static.
+    %   f_resamp:  bulk Doppler (Watermark). h_hat is static.
+    %     Can appear alone (tracking='none') or combined with theta/phi for
+    %     residual motion. Mirrors the convention in testUnpack Cases 6–8.
+    %
+    % Other m-files required: replay.m
+    % Subfunctions: place_taps, compensate_doppler, randsamples
+    % Toolbox required: Signal Processing Toolbox (for resample, findpeaks).
+    % MAT-files required: None.
+    %
+    % See also: replay.m, est.m
+    %
+    % Author: Zhengnan Li, Claude (Opus 4.6)
+    % Email : uwa-channels@ofdm.link
+    %
+    % License: MIT
+    %
+    % Revision history:
+    %   - Feb. 27, 2026: Initial release.
+    %   - Jul. 10, 2026: Added testReplayPower: channel-isolation and
+    %                    output-power checks for the array_index API.
 
-  properties (Constant)
-    c = 1500;
-    fs = 48e3;
-    start = 1000;
-  end
-
-  properties (TestParameter)
-    params = { ...
-      ...
-      ... %% === Static ===
-      ...
-      struct( ... % Case 1
-      'label', 'static_theta', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 20, ...
-      'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'theta', ...
-      'v_const', 0, 'v_amp', 0, 'n_cycles', 0), ...
-      struct( ... % Case 2
-      'label', 'static_phi', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 20, ...
-      'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'phi', ...
-      'v_const', 0, 'v_amp', 0, 'n_cycles', 0), ...
-      ...
-      ... %% === Low speed AUV (1 m/s) + mild sway ===
-      ...
-      struct( ... % Case 3
-      'label', 'low_speed_theta', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 20, ...
-      'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'theta', ...
-      'v_const', 1, 'v_amp', 0.2, 'n_cycles', 2), ...
-      struct( ... % Case 4
-      'label', 'low_speed_phi', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 20, ...
-      'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'phi', ...
-      'v_const', 1, 'v_amp', 0.2, 'n_cycles', 2), ...
-      ...
-      ... %% === Moderate speed (3 m/s) + platform sway ===
-      ...
-      struct( ... % Case 5
-      'label', 'moderate_speed_theta', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
-      'M', 2, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'theta', ...
-      'v_const', 3, 'v_amp', 0.5, 'n_cycles', 3), ...
-      struct( ... % Case 6
-      'label', 'moderate_speed_phi', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
-      'M', 2, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'phi', ...
-      'v_const', 3, 'v_amp', 0.5, 'n_cycles', 3), ...
-      ...
-      ... %% === High speed (5 m/s) + strong sway ===
-      ...
-      struct( ... % Case 7
-      'label', 'high_speed_theta', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
-      'M', 2, 'n_path', 6, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'theta', ...
-      'v_const', 5, 'v_amp', 1.0, 'n_cycles', 4), ...
-      struct( ... % Case 8
-      'label', 'high_speed_phi', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
-      'M', 2, 'n_path', 6, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'phi', ...
-      'v_const', 5, 'v_amp', 1.0, 'n_cycles', 4), ...
-      ...
-      ... %% === Negative drift (closing) + sway ===
-      ...
-      struct( ... % Case 9
-      'label', 'closing_theta', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
-      'M', 2, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'theta', ...
-      'v_const', -3, 'v_amp', 0.5, 'n_cycles', 3), ...
-      struct( ... % Case 10
-      'label', 'closing_phi', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
-      'M', 2, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'phi', ...
-      'v_const', -3, 'v_amp', 0.5, 'n_cycles', 3), ...
-      ...
-      ... %% === Pure sway, no drift ===
-      ...
-      struct( ... % Case 11
-      'label', 'sway_only_theta', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
-      'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'theta', ...
-      'v_const', 0, 'v_amp', 1.5, 'n_cycles', 5), ...
-      struct( ... % Case 12
-      'label', 'sway_only_phi', ...
-      'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
-      'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'phi', ...
-      'v_const', 0, 'v_amp', 1.5, 'n_cycles', 5), ...
-      ...
-      ... %% === Single element, high speed ===
-      ...
-      struct( ... % Case 13
-      'label', 'single_elem_theta', ...
-      'fc', 12e3, 'fs_delay', 8e3, 'fs_time', 100, ...
-      'M', 1, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'theta', ...
-      'v_const', 4, 'v_amp', 1.2, 'n_cycles', 3), ...
-      struct( ... % Case 14
-      'label', 'single_elem_phi', ...
-      'fc', 12e3, 'fs_delay', 8e3, 'fs_time', 100, ...
-      'M', 1, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
-      'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'phi', ...
-      'v_const', 4, 'v_amp', 1.2, 'n_cycles', 3), ...
-      ...
-      ... %% === Watermark (f_resamp) — mirrors testUnpack Cases 6–8 ===
-      ...
-      struct( ... % Case 15: f_resamp only, static h_hat
-      'label', 'watermark_f_resamp_only', ...
-      'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 20, ...
-      'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
-      'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'none', 'has_f_resamp', true, ...
-      'v_const', 2, 'v_amp', 0, 'n_cycles', 0), ...
-      struct( ... % Case 16: f_resamp handles bulk, theta_hat = residual
-      'label', 'watermark_f_resamp_theta', ...
-      'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 100, ...
-      'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
-      'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'theta', 'has_f_resamp', true, ...
-      'v_const', 2, 'v_amp', 1, 'n_cycles', 3), ...
-      struct( ... % Case 17: f_resamp handles bulk, phi_hat = residual
-      'label', 'watermark_f_resamp_phi', ...
-      'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 20, ...
-      'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
-      'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
-      'tracking', 'phi', 'has_f_resamp', true, ...
-      'v_const', 2, 'v_amp', -1, 'n_cycles', 3), ...
-      };
-  end
-
-  methods (TestMethodSetup)
-    function setRandomSeed(~)
-      rng(1994);
-    end
-  end
-
-  methods (Test)
-
-    function testReplayFunction(testCase, params)
-
-      c = testCase.c;
-      fs = testCase.fs;
-      start = testCase.start;
-      p = params;
-
-      %% 1. Multipath geometry
-      path_delay_0 = [0; sort(randsamples( ...
-        (pi/3:p.Tmp*1e3) / 1e3, p.n_path - 1)).'];
-
-      incremental_delay = (0:p.M-1) * p.d / c;
-      path_delay_0 = path_delay_0 + incremental_delay;
-      path_delay_0 = path_delay_0 - min(path_delay_0, [], 'all');
-
-      path_gain = exp(-path_delay_0 * p.coeff ./ p.Tmp);
-      c_p = path_gain .* exp(-1j * 2 * pi * p.fc * path_delay_0);
-
-      %% 2. Motion model
-      T_ch = p.channel_time;
-      N_time = round(T_ch * p.fs_time);
-      N_delay = round(T_ch * p.fs_delay);
-
-      t_snapshots = (0:N_time-1) / p.fs_time;
-      t_delay = (1:N_delay) / p.fs_delay;
-
-      if p.n_cycles > 0
-        omega_osc = 2*pi*p.n_cycles / T_ch;
-      end
-
-      dtau_snap = (p.v_const / c) * t_snapshots;
-      if p.n_cycles > 0
-        dtau_snap = dtau_snap ...
-          - p.v_amp / (c * omega_osc) ...
-          * (cos(omega_osc * t_snapshots) - 1);
-      end
-
-      phi = -2*pi*p.fc * (p.v_const/c) .* t_delay;
-      phi_sin = zeros(size(t_delay));
-      if p.n_cycles > 0
-        phi_sin = p.fc * p.v_amp * T_ch / (c * p.n_cycles) ...
-          * (cos(omega_osc * t_delay) - 1);
-        phi = phi + phi_sin;
-      end
-
-      %% 3. Build h_hat
-      L = ceil(p.fs_delay * p.Tmp * 1.5);
-      has_motion = (p.v_const ~= 0) || (p.v_amp ~= 0);
-
-      % Delay drift carried by the taps. With f_resamp present, the bulk
-      % drift from v_const is absorbed by resampling, so h_hat drifts only
-      % with the residual sway.
-      dtau_h = dtau_snap;
-      if isfield(p, 'has_f_resamp') && p.has_f_resamp
-        dtau_h = dtau_snap - (p.v_const / c) * t_snapshots;
-      end
-
-      if strcmp(p.tracking, 'theta') && has_motion
-        h_hat = zeros(L, p.M, N_time);
-        for k = 1:N_time
-          h_hat(:, :, k) = place_taps(L, p.M, ...
-            path_delay_0 + dtau_h(k), ...
-            c_p, p.Tmp, p.fs_delay);
-        end
-      else
-        h_hat_static = place_taps(L, p.M, ...
-          path_delay_0, c_p, p.Tmp, p.fs_delay);
-        h_hat = repmat(h_hat_static, 1, 1, N_time);
-      end
-
-      %% 4. Assemble channel struct
-      channel = struct();
-      channel.h_hat = h_hat;
-      channel.params.fs_delay = p.fs_delay;
-      channel.params.fs_time = p.fs_time;
-      channel.params.fc = p.fc;
-      channel.version = 1.0;
-
-      phi_tracking = phi;
-      if isfield(p, 'has_f_resamp') && p.has_f_resamp
-        phi_tracking = phi_sin;
-      end
-
-      switch p.tracking
-        case 'theta'
-          channel.theta_hat = repmat(phi_tracking, p.M, 1);
-        case 'phi'
-          channel.phi_hat = repmat(phi_tracking, p.M, 1);
-      end
-      if isfield(p, 'has_f_resamp') && p.has_f_resamp
-        channel.f_resamp = 1 / (1 + p.v_const / c);
-      end
-
-      %% 5. Transmit signal
-      data_symbols = randi([0, 1], 4095, 1) * 2 - 1;
-      baseband = resample(data_symbols, fs / p.R, 1);
-      passband = real(baseband .* exp(1j*2*pi*p.fc ...
-        * (0:length(baseband)-1).'/fs));
-      input = [zeros(round(fs/10), 1); passband; zeros(round(fs/10), 1)];
-
-      %% 6. Replay
-      r = replay(input, fs, 1:p.M, channel, start);
-
-      %% 7. Phase field for compensation
-      switch p.tracking
-        case 'theta'
-          phi_field = channel.theta_hat;
-        case 'phi'
-          phi_field = channel.phi_hat;
-        otherwise
-          phi_field = zeros(p.M, length(t_delay));
-      end
-      if isfield(p, 'has_f_resamp') && p.has_f_resamp
-        phi_field = phi_field + (1/channel.f_resamp - 1) * 2*pi*p.fc ...
-          * repmat(t_delay, p.M, 1);
-      end
-
-      %% 8. Cross-correlation and verification
-      baseband_ref = baseband;
-
-      % Replay time window
-      [p_rs, q_rs] = rat(p.fs_delay / fs);
-      T_baseband = length(resample(baseband, p_rs, q_rs));
-      t_replay_start = (start - 1) / p.fs_delay;
-      t_replay_end = (start + T_baseband + L) / p.fs_delay;
-
-      figure('Name', p.label);
-
-      % --- h_hat waterfall ---
-      subplot(221);
-      delay_axis = (0:L-1) / p.fs_delay * 1e3;
-      imagesc(delay_axis, t_snapshots, ...
-        squeeze(abs(channel.h_hat(:, 1, :))).');
-      ylabel('Time [s]'); xlabel('Delay [ms]');
-      title('|h_{hat}| (element 1)');
-      colorbar;
-      hold on;
-      yline(t_replay_start, 'r--', 'LineWidth', 1.5);
-      yline(t_replay_end, 'r--', 'LineWidth', 1.5);
-
-      % --- Speed from phase ---
-      subplot(222);
-      dphi = diff(phi_field(1, :));
-      dt = 1 / p.fs_delay;
-      v_inst = -dphi / (dt * 2 * pi * p.fc) * c;
-      t_speed = (0:length(v_inst)-1) / p.fs_delay;
-      plot(t_speed, v_inst);
-      xlabel('Time [s]'); ylabel('Speed [m/s]');
-      title('Instantaneous speed (from \phi)');
-      grid on;
-      hold on;
-      xline(t_replay_start, 'r--', 'LineWidth', 1.5);
-      xline(t_replay_end, 'r--', 'LineWidth', 1.5);
-
-      % --- Ground truth + Cross-correlation (merged) ---
-      subplot(2, 1, 2); hold on;
-      colors = lines(p.M);
-      max_xcor = 0;
-      sync_idx = zeros(1, p.M);
-      criteria = false(1, p.M);
-
-      % Plot ground truth stems first
-      for m = 1:p.M
-        stem(path_delay_0(:, m)*1e3, path_gain(:, m), ...
-          'Color', colors(m, :), 'MarkerSize', 6);
-      end
-
-      for m = 1:p.M
-        v_m = r(:, m) .* exp(-2j*pi*p.fc * (0:size(r,1)-1).'/fs);
-
-        if has_motion
-          v_m = compensate_doppler(v_m, fs, p.fc, ...
-            p.fs_delay, phi_field(m, :), start);
-        end
-
-        [xcor, lags] = xcorr(v_m, baseband_ref);
-
-        xcor(lags <= 0) = [];
-        lags(lags <= 0) = [];
-
-        [~, sync_idx(m)] = max(abs(xcor));
-
-        if m == 1
-          sync_ref = sync_idx(1);
-          max_xcor = max(abs(xcor));
-        end
-        lags_shifted = lags - sync_ref;
-        xcor_norm = abs(xcor) / max_xcor;
-
-        win = (lags_shifted >= -0.2*p.Tmp*fs) ...
-          & (lags_shifted <=  1.5*p.Tmp*fs);
-        xcor_win = xcor_norm(win);
-        lags_win = lags_shifted(win);
-
-        min_gain = min(abs(path_gain(:, m))) * 0.6;
-        min_sep = min(diff(sort(path_delay_0(:, m)))) * fs * 0.7;
-        [~, locs] = findpeaks(xcor_win, ...
-          'NPeaks', p.n_path, ...
-          'MinPeakHeight', min_gain, ...
-          'MinPeakDistance', min_sep);
-
-        xaxis = lags_win / fs * 1e3;
-        plot(xaxis, xcor_win, '--', 'Color', colors(m, :));
-        plot(xaxis(locs), xcor_win(locs), 'x', ...
-          'Color', colors(m, :), 'MarkerSize', 10);
-
-        % Weighted mean delay comparison
-        n_found = length(locs);
-        est_delays = lags_win(locs) / fs;
-        est_gains = xcor_win(locs);
-        [~, idx_e] = sort(est_delays);
-        [~, idx_t] = sort(path_delay_0(:, m));
-
-        n_found = length(locs);
-        if n_found == p.n_path
-          est_delays = sort(lags_win(locs) / fs);
-          true_delays = sort(path_delay_0(:, m));
-          [~, idx_t] = sort(path_delay_0(:, m));
-          true_gains = path_gain(idx_t, m);
-          tol = 2e-4 * p.n_path;
-          criteria(m) = sum(abs(est_delays(:) - true_delays) .* true_gains) < tol;
-        end
-      end
-
-      xlabel('Delay [ms]'); ylabel('Path gain / |Xcorr|');
-      xlim([-0.2*p.Tmp*1e3, 1.5*p.Tmp*1e3]);
-      title('Ground truth + Cross-correlation');
-
-      if all(criteria)
-        result = 'PASSED';
-      else
-        result = 'FAILED';
-      end
-      sgtitle(sprintf('%s: %s', p.label, result), 'Interpreter', 'none');
-
-      testCase.verifyTrue(all(criteria), ...
-        sprintf('Peak delay mismatch for case: %s', p.label));
+    properties (Constant)
+        c = 1500;
+        fs = 48e3;
+        start = 1000;
     end
 
-    function testReplayPower(testCase)
-      % Two checks for the array_index API:
-      %   1. Isolation: replaying through a single hydrophone must equal the
-      %      corresponding column of a replay through all hydrophones (same
-      %      start). This holds only because output normalization was removed,
-      %      so each channel is processed independently of the selected set.
-      %   2. Power: after normalizing the channel matrix so the average
-      %      per-channel energy is 1 (cf. calib.m), a unit-variance passband
-      %      input replays to an output whose per-channel variance is O(1).
-
-      c = testCase.c;
-      fs = testCase.fs;
-      start = testCase.start;
-
-      fc = 12e3; fs_delay = 10e3; fs_time = 20;
-      M = 4; n_path = 8; R = 4e3; Tmp = 15e-3; coeff = 1.5; d = 0.5;
-      T_ch = 5;
-
-      %% 1. Multipath geometry (static channel)
-      path_delay_0 = [0; sort(randsamples( ...
-        (pi/3:Tmp*1e3) / 1e3, n_path - 1)).'];
-      incremental_delay = (0:M-1) * d / c;
-      path_delay_0 = path_delay_0 + incremental_delay;
-      path_delay_0 = path_delay_0 - min(path_delay_0, [], 'all');
-      path_gain = exp(-path_delay_0 * coeff ./ Tmp);
-      c_p = path_gain .* exp(-1j * 2 * pi * fc * path_delay_0);
-
-      L = ceil(fs_delay * Tmp * 1.5);
-      N_time = round(T_ch * fs_time);
-      h_hat_static = place_taps(L, M, path_delay_0, c_p, Tmp, fs_delay);
-      h_hat = repmat(h_hat_static, 1, 1, N_time);
-
-      %% 2. Normalize so the average per-channel energy is 1 (cf. calib.m)
-      T = size(h_hat, 3);
-      E_tot = sum(abs(h_hat(:)).^2);
-      E_tot_avg = E_tot / T;
-      alpha = sqrt(M / E_tot_avg);
-      h_hat = alpha * h_hat;
-
-      channel = struct();
-      channel.h_hat = h_hat;
-      channel.params.fs_delay = fs_delay;
-      channel.params.fs_time = fs_time;
-      channel.params.fc = fc;
-      channel.version = 1.0;
-
-      %% 3. Unit-variance passband probe
-      data_symbols = randi([0, 1], 8192, 1) * 2 - 1;
-      baseband = resample(data_symbols, fs / R, 1);
-      passband = real(baseband .* exp(1j*2*pi*fc*(0:length(baseband)-1).'/fs));
-      passband = passband ./ sqrt(var(passband));
-
-      %% 4. Replay one channel, and all channels, with the same start
-      target_ch = 3;
-      r_single = replay(passband, fs, target_ch, channel, start);
-      r_all = replay(passband, fs, 1:M, channel, start);
-
-      %% 5. Check 1: isolation
-      n = min(size(r_single, 1), size(r_all, 1));
-      ref = r_all(1:n, target_ch);
-      err = max(abs(r_single(1:n, 1) - ref)) / max(abs(ref));
-      testCase.verifyLessThan(err, 1e-10, ...
-        sprintf(['Single-channel replay does not match column %d of the ' ...
-        'full replay (relative err = %.2e).'], target_ch, err));
-
-      %% 6. Check 2: per-channel output power is O(1)
-      mean_var = mean(var(r_all));
-      fprintf('testReplayPower: per-channel output power mean = %.3f\n', mean_var);
-      testCase.verifyGreaterThan(mean_var, 0.93, ...
-        sprintf('Mean output power %.3f is unexpectedly small.', mean_var));
-      testCase.verifyLessThan(mean_var, 1.07, ...
-        sprintf('Mean output power %.3f is unexpectedly large.', mean_var));
+    properties (TestParameter)
+        params = { ...
+            ...
+            ... %% === Static ===
+            ...
+            struct( ... % Case 1
+            'label', 'static_theta', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 20, ...
+            'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'theta', ...
+            'v_const', 0, 'v_amp', 0, 'n_cycles', 0), ...
+            struct( ... % Case 2
+            'label', 'static_phi', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 20, ...
+            'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'phi', ...
+            'v_const', 0, 'v_amp', 0, 'n_cycles', 0), ...
+            ...
+            ... %% === Low speed AUV (1 m/s) + mild sway ===
+            ...
+            struct( ... % Case 3
+            'label', 'low_speed_theta', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 20, ...
+            'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'theta', ...
+            'v_const', 1, 'v_amp', 0.2, 'n_cycles', 2), ...
+            struct( ... % Case 4
+            'label', 'low_speed_phi', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 20, ...
+            'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'phi', ...
+            'v_const', 1, 'v_amp', 0.2, 'n_cycles', 2), ...
+            ...
+            ... %% === Moderate speed (3 m/s) + platform sway ===
+            ...
+            struct( ... % Case 5
+            'label', 'moderate_speed_theta', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
+            'M', 2, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'theta', ...
+            'v_const', 3, 'v_amp', 0.5, 'n_cycles', 3), ...
+            struct( ... % Case 6
+            'label', 'moderate_speed_phi', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
+            'M', 2, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'phi', ...
+            'v_const', 3, 'v_amp', 0.5, 'n_cycles', 3), ...
+            ...
+            ... %% === High speed (5 m/s) + strong sway ===
+            ...
+            struct( ... % Case 7
+            'label', 'high_speed_theta', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
+            'M', 2, 'n_path', 6, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'theta', ...
+            'v_const', 5, 'v_amp', 1.0, 'n_cycles', 4), ...
+            struct( ... % Case 8
+            'label', 'high_speed_phi', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
+            'M', 2, 'n_path', 6, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'phi', ...
+            'v_const', 5, 'v_amp', 1.0, 'n_cycles', 4), ...
+            ...
+            ... %% === Negative drift (closing) + sway ===
+            ...
+            struct( ... % Case 9
+            'label', 'closing_theta', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
+            'M', 2, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'theta', ...
+            'v_const', -3, 'v_amp', 0.5, 'n_cycles', 3), ...
+            struct( ... % Case 10
+            'label', 'closing_phi', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
+            'M', 2, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'phi', ...
+            'v_const', -3, 'v_amp', 0.5, 'n_cycles', 3), ...
+            ...
+            ... %% === Pure sway, no drift ===
+            ...
+            struct( ... % Case 11
+            'label', 'sway_only_theta', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
+            'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'theta', ...
+            'v_const', 0, 'v_amp', 1.5, 'n_cycles', 5), ...
+            struct( ... % Case 12
+            'label', 'sway_only_phi', ...
+            'fc', 12e3, 'fs_delay', 10e3, 'fs_time', 100, ...
+            'M', 3, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'phi', ...
+            'v_const', 0, 'v_amp', 1.5, 'n_cycles', 5), ...
+            ...
+            ... %% === Single element, high speed ===
+            ...
+            struct( ... % Case 13
+            'label', 'single_elem_theta', ...
+            'fc', 12e3, 'fs_delay', 8e3, 'fs_time', 100, ...
+            'M', 1, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'theta', ...
+            'v_const', 4, 'v_amp', 1.2, 'n_cycles', 3), ...
+            struct( ... % Case 14
+            'label', 'single_elem_phi', ...
+            'fc', 12e3, 'fs_delay', 8e3, 'fs_time', 100, ...
+            'M', 1, 'n_path', 8, 'R', 4e3, 'Tmp', 15e-3, ...
+            'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'phi', ...
+            'v_const', 4, 'v_amp', 1.2, 'n_cycles', 3), ...
+            ...
+            ... %% === Watermark (f_resamp) — mirrors testUnpack Cases 6–8 ===
+            ...
+            struct( ... % Case 15: f_resamp only, static h_hat
+            'label', 'watermark_f_resamp_only', ...
+            'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 20, ...
+            'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
+            'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'none', 'has_f_resamp', true, ...
+            'v_const', 2, 'v_amp', 0, 'n_cycles', 0), ...
+            struct( ... % Case 16: f_resamp handles bulk, theta_hat = residual
+            'label', 'watermark_f_resamp_theta', ...
+            'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 100, ...
+            'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
+            'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'theta', 'has_f_resamp', true, ...
+            'v_const', 2, 'v_amp', 1, 'n_cycles', 3), ...
+            struct( ... % Case 17: f_resamp handles bulk, phi_hat = residual
+            'label', 'watermark_f_resamp_phi', ...
+            'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 20, ...
+            'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
+            'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
+            'tracking', 'phi', 'has_f_resamp', true, ...
+            'v_const', 2, 'v_amp', -1, 'n_cycles', 3), ...
+            };
     end
 
-  end
+    methods (TestMethodSetup)
+        function setRandomSeed(~)
+            rng(1994);
+        end
+    end
+
+    methods (Test)
+
+        function testReplayFunction(testCase, params)
+
+            c = testCase.c;
+            fs = testCase.fs;
+            start = testCase.start;
+            p = params;
+
+            %% 1. Multipath geometry
+            path_delay_0 = [0; sort(randsamples( ...
+                (pi/3:p.Tmp*1e3) / 1e3, p.n_path - 1)).'];
+
+            incremental_delay = (0:p.M-1) * p.d / c;
+            path_delay_0 = path_delay_0 + incremental_delay;
+            path_delay_0 = path_delay_0 - min(path_delay_0, [], 'all');
+
+            path_gain = exp(-path_delay_0 * p.coeff ./ p.Tmp);
+            c_p = path_gain .* exp(-1j * 2 * pi * p.fc * path_delay_0);
+
+            %% 2. Motion model
+            T_ch = p.channel_time;
+            N_time = round(T_ch * p.fs_time);
+            N_delay = round(T_ch * p.fs_delay);
+
+            t_snapshots = (0:N_time-1) / p.fs_time;
+            t_delay = (1:N_delay) / p.fs_delay;
+
+            if p.n_cycles > 0
+                omega_osc = 2*pi*p.n_cycles / T_ch;
+            end
+
+            dtau_snap = (p.v_const / c) * t_snapshots;
+            if p.n_cycles > 0
+                dtau_snap = dtau_snap ...
+                    - p.v_amp / (c * omega_osc) ...
+                    * (cos(omega_osc * t_snapshots) - 1);
+            end
+
+            phi = -2*pi*p.fc * (p.v_const/c) .* t_delay;
+            phi_sin = zeros(size(t_delay));
+            if p.n_cycles > 0
+                phi_sin = p.fc * p.v_amp * T_ch / (c * p.n_cycles) ...
+                    * (cos(omega_osc * t_delay) - 1);
+                phi = phi + phi_sin;
+            end
+
+            %% 3. Build h_hat
+            L = ceil(p.fs_delay * p.Tmp * 1.5);
+            has_motion = (p.v_const ~= 0) || (p.v_amp ~= 0);
+
+            % Delay drift carried by the taps. With f_resamp present, the bulk
+            % drift from v_const is absorbed by resampling, so h_hat drifts only
+            % with the residual sway.
+            dtau_h = dtau_snap;
+            if isfield(p, 'has_f_resamp') && p.has_f_resamp
+                dtau_h = dtau_snap - (p.v_const / c) * t_snapshots;
+            end
+
+            if strcmp(p.tracking, 'theta') && has_motion
+                h_hat = zeros(L, p.M, N_time);
+                for k = 1:N_time
+                    h_hat(:, :, k) = place_taps(L, p.M, ...
+                        path_delay_0 + dtau_h(k), ...
+                        c_p, p.Tmp, p.fs_delay);
+                end
+            else
+                h_hat_static = place_taps(L, p.M, ...
+                    path_delay_0, c_p, p.Tmp, p.fs_delay);
+                h_hat = repmat(h_hat_static, 1, 1, N_time);
+            end
+
+            %% 4. Assemble channel struct
+            channel = struct();
+            channel.h_hat = h_hat;
+            channel.params.fs_delay = p.fs_delay;
+            channel.params.fs_time = p.fs_time;
+            channel.params.fc = p.fc;
+            channel.version = 1.0;
+
+            phi_tracking = phi;
+            if isfield(p, 'has_f_resamp') && p.has_f_resamp
+                phi_tracking = phi_sin;
+            end
+
+            switch p.tracking
+                case 'theta'
+                    channel.theta_hat = repmat(phi_tracking, p.M, 1);
+                case 'phi'
+                    channel.phi_hat = repmat(phi_tracking, p.M, 1);
+            end
+            if isfield(p, 'has_f_resamp') && p.has_f_resamp
+                channel.f_resamp = 1 / (1 + p.v_const / c);
+            end
+
+            %% 5. Transmit signal
+            data_symbols = randi([0, 1], 4095, 1) * 2 - 1;
+            baseband = resample(data_symbols, fs / p.R, 1);
+            passband = real(baseband .* exp(1j*2*pi*p.fc ...
+                * (0:length(baseband)-1).'/fs));
+            input = [zeros(round(fs/10), 1); passband; zeros(round(fs/10), 1)];
+
+            %% 6. Replay
+            r = replay(input, fs, 1:p.M, channel, start);
+
+            %% 7. Phase field for compensation
+            switch p.tracking
+                case 'theta'
+                    phi_field = channel.theta_hat;
+                case 'phi'
+                    phi_field = channel.phi_hat;
+                otherwise
+                    phi_field = zeros(p.M, length(t_delay));
+            end
+            if isfield(p, 'has_f_resamp') && p.has_f_resamp
+                phi_field = phi_field + (1/channel.f_resamp - 1) * 2*pi*p.fc ...
+                    * repmat(t_delay, p.M, 1);
+            end
+
+            %% 8. Cross-correlation and verification
+            baseband_ref = baseband;
+
+            % Replay time window
+            [p_rs, q_rs] = rat(p.fs_delay / fs);
+            T_baseband = length(resample(baseband, p_rs, q_rs));
+            t_replay_start = (start - 1) / p.fs_delay;
+            t_replay_end = (start + T_baseband + L) / p.fs_delay;
+
+            figure('Name', p.label);
+
+            % --- h_hat waterfall ---
+            subplot(221);
+            delay_axis = (0:L-1) / p.fs_delay * 1e3;
+            imagesc(delay_axis, t_snapshots, ...
+                squeeze(abs(channel.h_hat(:, 1, :))).');
+            ylabel('Time [s]'); xlabel('Delay [ms]');
+            title('|h_{hat}| (element 1)');
+            colorbar;
+            hold on;
+            yline(t_replay_start, 'r--', 'LineWidth', 1.5);
+            yline(t_replay_end, 'r--', 'LineWidth', 1.5);
+
+            % --- Speed from phase ---
+            subplot(222);
+            dphi = diff(phi_field(1, :));
+            dt = 1 / p.fs_delay;
+            v_inst = -dphi / (dt * 2 * pi * p.fc) * c;
+            t_speed = (0:length(v_inst)-1) / p.fs_delay;
+            plot(t_speed, v_inst);
+            xlabel('Time [s]'); ylabel('Speed [m/s]');
+            title('Instantaneous speed (from \phi)');
+            grid on;
+            hold on;
+            xline(t_replay_start, 'r--', 'LineWidth', 1.5);
+            xline(t_replay_end, 'r--', 'LineWidth', 1.5);
+
+            % --- Ground truth + Cross-correlation (merged) ---
+            subplot(2, 1, 2); hold on;
+            colors = lines(p.M);
+            max_xcor = 0;
+            sync_idx = zeros(1, p.M);
+            criteria = false(1, p.M);
+
+            % Plot ground truth stems first
+            for m = 1:p.M
+                stem(path_delay_0(:, m)*1e3, path_gain(:, m), ...
+                    'Color', colors(m, :), 'MarkerSize', 6);
+            end
+
+            for m = 1:p.M
+                v_m = r(:, m) .* exp(-2j*pi*p.fc * (0:size(r,1)-1).'/fs);
+
+                if has_motion
+                    v_m = compensate_doppler(v_m, fs, p.fc, ...
+                        p.fs_delay, phi_field(m, :), start);
+                end
+
+                [xcor, lags] = xcorr(v_m, baseband_ref);
+
+                xcor(lags <= 0) = [];
+                lags(lags <= 0) = [];
+
+                [~, sync_idx(m)] = max(abs(xcor));
+
+                if m == 1
+                    sync_ref = sync_idx(1);
+                    max_xcor = max(abs(xcor));
+                end
+                lags_shifted = lags - sync_ref;
+                xcor_norm = abs(xcor) / max_xcor;
+
+                win = (lags_shifted >= -0.2*p.Tmp*fs) ...
+                    & (lags_shifted <=  1.5*p.Tmp*fs);
+                xcor_win = xcor_norm(win);
+                lags_win = lags_shifted(win);
+
+                min_gain = min(abs(path_gain(:, m))) * 0.6;
+                min_sep = min(diff(sort(path_delay_0(:, m)))) * fs * 0.7;
+                [~, locs] = findpeaks(xcor_win, ...
+                    'NPeaks', p.n_path, ...
+                    'MinPeakHeight', min_gain, ...
+                    'MinPeakDistance', min_sep);
+
+                xaxis = lags_win / fs * 1e3;
+                plot(xaxis, xcor_win, '--', 'Color', colors(m, :));
+                plot(xaxis(locs), xcor_win(locs), 'x', ...
+                    'Color', colors(m, :), 'MarkerSize', 10);
+
+                % Weighted mean delay comparison
+                n_found = length(locs);
+                est_delays = lags_win(locs) / fs;
+                est_gains = xcor_win(locs);
+                [~, idx_e] = sort(est_delays);
+                [~, idx_t] = sort(path_delay_0(:, m));
+
+                n_found = length(locs);
+                if n_found == p.n_path
+                    est_delays = sort(lags_win(locs) / fs);
+                    true_delays = sort(path_delay_0(:, m));
+                    [~, idx_t] = sort(path_delay_0(:, m));
+                    true_gains = path_gain(idx_t, m);
+                    tol = 2e-4 * p.n_path;
+                    criteria(m) = sum(abs(est_delays(:) - true_delays) .* true_gains) < tol;
+                end
+            end
+
+            xlabel('Delay [ms]'); ylabel('Path gain / |Xcorr|');
+            xlim([-0.2*p.Tmp*1e3, 1.5*p.Tmp*1e3]);
+            title('Ground truth + Cross-correlation');
+
+            if all(criteria)
+                result = 'PASSED';
+            else
+                result = 'FAILED';
+            end
+            sgtitle(sprintf('%s: %s', p.label, result), 'Interpreter', 'none');
+
+            testCase.verifyTrue(all(criteria), ...
+                sprintf('Peak delay mismatch for case: %s', p.label));
+        end
+
+        function testReplayPower(testCase)
+            % Two checks for the array_index API:
+            %   1. Isolation: replaying through a single hydrophone must equal the
+            %      corresponding column of a replay through all hydrophones (same
+            %      start). This holds only because output normalization was removed,
+            %      so each channel is processed independently of the selected set.
+            %   2. Power: after normalizing the channel matrix so the average
+            %      per-channel energy is 1 (cf. calib.m), a unit-variance passband
+            %      input replays to an output whose per-channel variance is O(1).
+
+            c = testCase.c;
+            fs = testCase.fs;
+            start = testCase.start;
+
+            fc = 12e3; fs_delay = 10e3; fs_time = 20;
+            M = 4; n_path = 8; R = 4e3; Tmp = 15e-3; coeff = 1.5; d = 0.5;
+            T_ch = 5;
+
+            %% 1. Multipath geometry (static channel)
+            path_delay_0 = [0; sort(randsamples( ...
+                (pi/3:Tmp*1e3) / 1e3, n_path - 1)).'];
+            incremental_delay = (0:M-1) * d / c;
+            path_delay_0 = path_delay_0 + incremental_delay;
+            path_delay_0 = path_delay_0 - min(path_delay_0, [], 'all');
+            path_gain = exp(-path_delay_0 * coeff ./ Tmp);
+            c_p = path_gain .* exp(-1j * 2 * pi * fc * path_delay_0);
+
+            L = ceil(fs_delay * Tmp * 1.5);
+            N_time = round(T_ch * fs_time);
+            h_hat_static = place_taps(L, M, path_delay_0, c_p, Tmp, fs_delay);
+            h_hat = repmat(h_hat_static, 1, 1, N_time);
+
+            %% 2. Normalize so the average per-channel energy is 1 (cf. calib.m)
+            T = size(h_hat, 3);
+            E_tot = sum(abs(h_hat(:)).^2);
+            E_tot_avg = E_tot / T;
+            alpha = sqrt(M / E_tot_avg);
+            h_hat = alpha * h_hat;
+
+            channel = struct();
+            channel.h_hat = h_hat;
+            channel.params.fs_delay = fs_delay;
+            channel.params.fs_time = fs_time;
+            channel.params.fc = fc;
+            channel.version = 1.0;
+
+            %% 3. Unit-variance passband probe
+            data_symbols = randi([0, 1], 8192, 1) * 2 - 1;
+            baseband = resample(data_symbols, fs / R, 1);
+            passband = real(baseband .* exp(1j*2*pi*fc*(0:length(baseband)-1).'/fs));
+            passband = passband ./ sqrt(var(passband));
+
+            %% 4. Replay one channel, and all channels, with the same start
+            target_ch = 3;
+            r_single = replay(passband, fs, target_ch, channel, start);
+            r_all = replay(passband, fs, 1:M, channel, start);
+
+            %% 5. Check 1: isolation
+            n = min(size(r_single, 1), size(r_all, 1));
+            ref = r_all(1:n, target_ch);
+            err = max(abs(r_single(1:n, 1) - ref)) / max(abs(ref));
+            testCase.verifyLessThan(err, 1e-10, ...
+                sprintf(['Single-channel replay does not match column %d of the ' ...
+                'full replay (relative err = %.2e).'], target_ch, err));
+
+            %% 6. Check 2: per-channel output power is O(1)
+            mean_var = mean(var(r_all));
+            fprintf('testReplayPower: per-channel output power mean = %.3f\n', mean_var);
+            testCase.verifyGreaterThan(mean_var, 0.93, ...
+                sprintf('Mean output power %.3f is unexpectedly small.', mean_var));
+            testCase.verifyLessThan(mean_var, 1.07, ...
+                sprintf('Mean output power %.3f is unexpectedly large.', mean_var));
+        end
+
+    end
 end
 
 
@@ -514,8 +514,8 @@ subs = round((delays + 0.2*Tmp) * fs_delay);
 valid = (subs >= 1) & (subs <= L);
 col_offset = (0:M-1) * L;
 for m = 1:M
-  v = valid(:, m);
-  h(subs(v, m) + col_offset(m)) = gains(v, m);
+    v = valid(:, m);
+    h(subs(v, m) + col_offset(m)) = gains(v, m);
 end
 end
 
