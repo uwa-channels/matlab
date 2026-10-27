@@ -4,9 +4,9 @@ message: >-
   channel impulse responses or the noise statistics, please also cite the
   Zenodo dataset listed under references.
 type: software
-title: "Underwater Acoustic Channel Toolbox (MATLAB/Octave)"
+title: "Underwater Acoustic Channel Toolbox (MATLAB)"
 abstract: >-
-  MATLAB/Octave toolbox for replaying signals through measured underwater acoustic channels, generating realistic ocean noise, and unpacking stored impulse responses.
+  MATLAB toolbox for replaying signals through measured underwater acoustic channels, generating realistic ocean noise, and unpacking stored impulse responses.
 authors:
   - family-names: "Li"
     given-names: "Zhengnan"
@@ -22,7 +22,6 @@ keywords:
   - "channel modeling"
   - "channel replay"
   - "matlab"
-  - "octave"
 identifiers:
   - type: doi
     value: "10.48550/arXiv.2609.03207"

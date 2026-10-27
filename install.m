@@ -1,13 +1,13 @@
 function install()
-%INSTALL Adds this toolbox to the MATLAB or Octave search path permanently.
+%INSTALL Adds this toolbox to the MATLAB search path permanently.
 %
 % Run INSTALL once from the root of a cloned or downloaded copy of this
 % repository.  It adds the src and examples folders to the search path and
 % saves the path so the functions stay available in later sessions.
 %
 % MATLAB users can instead install the packaged toolbox from the Add-On
-% Explorer or from a .mltbx file; see the README.  This script is the
-% supported route for Octave, which cannot read .mltbx files.
+% Explorer or from a .mltbx file; see the README.  This script is for
+% working from a clone, where edits to src take effect immediately.
 
 here = fileparts(mfilename("fullpath"));
 

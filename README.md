@@ -5,11 +5,11 @@
 [![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=uwa-channels/matlab)
 
 
-# Underwater Acoustic Channel Toolbox — MATLAB / Octave
+# Underwater Acoustic Channel Toolbox — MATLAB
 
-[![Generic badge](https://img.shields.io/badge/MATLAB-R2021a-BLUE.svg)](https://shields.io/) with [Signal Processing Toolbox™](https://www.mathworks.com/products/signal.html) or [![Generic badge](https://img.shields.io/badge/Octave-9.0-BLUE.svg)](https://shields.io) with the [signal](https://gnu-octave.github.io/packages/signal/) and [statistics](https://gnu-octave.github.io/packages/statistics/) packages.
+[![Generic badge](https://img.shields.io/badge/MATLAB-R2021a-BLUE.svg)](https://shields.io/) with [Signal Processing Toolbox™](https://www.mathworks.com/products/signal.html).
 
-MATLAB®/Octave toolbox for replaying signals through measured underwater acoustic channels, generating realistic ocean noise, and unpacking stored impulse responses.  To learn more about the channels, check out the [documentation](https://uwa-channels.github.io/).
+MATLAB® toolbox for replaying signals through measured underwater acoustic channels, generating realistic ocean noise, and unpacking stored impulse responses.  To learn more about the channels, check out the [documentation](https://uwa-channels.github.io/).
 
 Please report bugs and suggest enhancements by [creating a new issue](https://github.com/uwa-channels/matlab/issues).  We welcome your feedback.  See [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 
@@ -39,16 +39,16 @@ You can also download `uwa-channels.mltbx` from the [latest release](https://git
 
 Requires R2021a or later with the [Signal Processing Toolbox](https://www.mathworks.com/products/signal.html).
 
-### From a clone, and for Octave
+### From a clone
 
-If you want to read or modify the source, or if you are running Octave (which cannot read `.mltbx` files), add the repository folders to the search path instead of installing the packaged toolbox:
+If you want to read or modify the source, add the repository folders to the search path instead of installing the packaged toolbox:
 
 ```bash
 git clone https://github.com/uwa-channels/matlab.git
 cd matlab
 ```
 
-Then, from that folder, in MATLAB or Octave:
+Then, from that folder, in MATLAB:
 
 ```matlab
 install
@@ -56,13 +56,11 @@ install
 
 This adds `src` and `examples` to the search path and saves the path so they stay available in later sessions.  Because you are then running the working copy directly, edits to `src` take effect immediately.
 
-Under Octave this needs version 9.0 or later with the [`signal`](https://gnu-octave.github.io/packages/signal/) and [`statistics`](https://gnu-octave.github.io/packages/statistics/) packages.
-
 Do not use both routes at once: if the packaged add-on is installed and you also run `install`, both copies are on the path and the one that wins depends on path order.  Run `matlab.addons.uninstall('uwa-channels')` first if you are switching to a clone.
 
 ## Quick start
 
-Download the channel MAT-files from [Zenodo](https://doi.org/10.5281/zenodo.21287414) and place them where MATLAB®/Octave can find them.
+Download the channel MAT-files from [Zenodo](https://doi.org/10.5281/zenodo.21287414) and place them where MATLAB® can find them.
 
 ### Replay and noise generation
 

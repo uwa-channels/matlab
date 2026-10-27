@@ -19,8 +19,8 @@ matlab -batch "addpath('src'); assertSuccess(runtests('tests'))"
 CI (`.github/workflows/ci.yml`) runs the same suite on R2021a and on the latest
 release, with the Signal Processing Toolbox.  Keep the code working on R2021a:
 do not use functions or syntax introduced after it.  The tests use
-`matlab.unittest`, so they do not run in Octave, but `src/` must still run in
-Octave 9 with the `signal` and `statistics` packages.
+`matlab.unittest`.  The toolbox supports MATLAB only; `src/` relies on
+MATLAB's `resample` with the `'Dimension'` option, which Octave lacks.
 
 ## Parity with Python
 
