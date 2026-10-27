@@ -33,7 +33,7 @@ matlab.addons.install(websave([tempname '.mltbx'], 'https://github.com/uwa-chann
 
 That downloads the latest release and installs it as an add-on, so `replay`, `noisegen`, and `unpack` are on your path in every session afterwards.  Run the same command again later to upgrade in place; it replaces the installed version rather than adding a second copy.
 
-To remove it, run `matlab.addons.uninstall('uwa-channels')`, or use **Home > Add-Ons > Manage Add-Ons**.
+To remove it, run `matlab.addons.uninstall('Underwater Acoustic Channel Toolbox')`, or use **Home > Add-Ons > Manage Add-Ons**.
 
 You can also download `uwa-channels.mltbx` from the [latest release](https://github.com/uwa-channels/matlab/releases/latest) and double-click it.
 
@@ -56,7 +56,7 @@ install
 
 This adds `src` and `examples` to the search path and saves the path so they stay available in later sessions.  Because you are then running the working copy directly, edits to `src` take effect immediately.
 
-Do not use both routes at once: if the packaged add-on is installed and you also run `install`, both copies are on the path and the one that wins depends on path order.  Run `matlab.addons.uninstall('uwa-channels')` first if you are switching to a clone.
+Do not use both routes at once: if the packaged add-on is installed and you also run `install`, both copies are on the path and the one that wins depends on path order.  Run `matlab.addons.uninstall('Underwater Acoustic Channel Toolbox')` first if you are switching to a clone.
 
 ## Quick start
 

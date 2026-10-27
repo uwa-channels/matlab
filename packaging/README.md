@@ -52,12 +52,12 @@ matlab.addons.uninstall(t.Identifier)
 
 ## Do not change the identifier
 
-`buildToolbox.m` hard-codes the identifier `uwa-channels`.  MATLAB uses it to tell that a new `.mltbx` upgrades an installed toolbox instead of being a separate add-on.  Changing it would leave existing users with two copies of the functions on their path.
+`buildToolbox.m` hard-codes the identifier `8c13ed2c-7bb7-4747-9dcd-dffb55f97592`.  MATLAB uses it to tell that a new `.mltbx` upgrades an installed toolbox instead of being a separate add-on.  Changing it would leave existing users with two copies of the functions on their path.  From R2026b, `ToolboxOptions` requires the identifier to be a UUID.
 
-The packaging dialog defaults to a GUID, but the identifier is a free-form string; MathWorks' own documentation example uses `com-mathworks-guilayout`.  A readable one is worth having because it is what appears in the `Identifier` column of `matlab.addons.installedAddons` and what users type to uninstall:
+Users uninstall by the toolbox name, which is unique among their add-ons:
 
 ```matlab
-matlab.addons.uninstall('uwa-channels')
+matlab.addons.uninstall('Underwater Acoustic Channel Toolbox')
 ```
 
 ## Dependencies

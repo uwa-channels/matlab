@@ -20,9 +20,10 @@ function outputFile = buildToolbox(version)
 % Keep this identifier fixed forever.  MATLAB uses it to recognize that a
 % new .mltbx is an upgrade of an installed toolbox rather than a separate
 % add-on, so changing it would leave users with two copies on the path.
-% It need not be a GUID; a readable name shows up in the Identifier column
-% of matlab.addons.installedAddons and makes the uninstall command legible.
-identifier = "uwa-channels";
+% From R2026b, ToolboxOptions requires it to be a UUID.  Users uninstall by
+% the toolbox name instead:
+%   matlab.addons.uninstall('Underwater Acoustic Channel Toolbox')
+identifier = "8c13ed2c-7bb7-4747-9dcd-dffb55f97592";
 
 repoRoot = fileparts(fileparts(mfilename("fullpath")));
 
