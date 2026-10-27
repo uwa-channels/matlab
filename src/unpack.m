@@ -59,10 +59,6 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 %                    started one sample of fs_delay in.  That put a constant
 %                    phase rotation, and through phase_drift a constant delay
 %                    offset, on every unpacked tap.
-%   - Oct. 26, 2026: Dropped the 'Dimension' option of resample, which
-%                    Octave's signal package does not accept.  Each h_hat
-%                    slice is now transposed so resample runs along time;
-%                    output is unchanged.
 %
 
 %% Unpacking variables
@@ -127,7 +123,7 @@ t_orig = (0:N_phi-1) ./ fs_delay;
 
 for m = 1:length(array_index)
   h_hat_m = squeeze(h_hat(:, m, :));
-  h_resampled = resample(h_hat_m.', p1, q1).';
+  h_resampled = resample(h_hat_m, p1, q1, 'Dimension', 2);
   t_new = (0:size(h_resampled, 2)-1) ./ fs_time_desired;
 
   if has_phase

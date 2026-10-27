@@ -20,8 +20,10 @@ function w = noisegen(input_size, fs, varargin)
 %   fc        - Center frequency [Hz].
 %   version   - Noise struct version (>= 1.0).
 %
-% BETA is normalized so that the noise (pseudo-)powers of the M elements sum
-% to M, and each element keeps its measured power relative to the others.
+% BETA is normalized over the whole array: the expected noise (pseudo-)powers
+% of all M elements sum to M, and each element keeps its measured power
+% relative to the others.  A subset selected with ARRAY_INDEX keeps the powers
+% of its elements, so its sum need not equal NUMEL(ARRAY_INDEX).
 % For alpha < 2 the pseudo-power 2*c^2, with c the scale parameter, takes
 % the place of the variance.  The pink noise of NOISEGEN(INPUT_SIZE, FS)
 % instead has unit power on every element.
@@ -66,8 +68,7 @@ function w = noisegen(input_size, fs, varargin)
 %                    slice-copy matmul loop. Output is unchanged.
 %   - Oct. 26, 2026: Removed rms_power from the noise struct description;
 %                    the released files do not carry it and generation never
-%                    read it.  Dropped the 'Dimension' option of resample,
-%                    which Octave's signal package does not accept.
+%                    read it.
 %
 
 
@@ -167,7 +168,7 @@ for i = 1:Nout
   w(:, i) = wi(1:K);
 end
 
-w = resample(w, p, q);
+w = resample(w, p, q, 'Dimension', 1);
 w = w(1:input_size(1), :);
 end
 

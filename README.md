@@ -110,7 +110,7 @@ Each noise MAT-file contains:
 | `fc` | Center frequency [Hz] |
 | `version` | Noise struct version |
 
-`beta` is normalized so that the noise powers of the M elements sum to M; each element keeps its measured power relative to the others.
+`beta` is normalized over the whole array: the expected noise powers of all M elements sum to M, and each element keeps its measured power relative to the others.  A subset selected with `array_index` keeps the powers of its elements, so its sum need not equal the size of the subset.
 
 ## Tests
 

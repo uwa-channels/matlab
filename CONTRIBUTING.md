@@ -130,7 +130,7 @@ Each noise `.mat` file contains the following fields:
 | `fc` | scalar | Center frequency $f_c$ [Hz]. |
 | `version` | scalar | Noise struct version number. `noisegen` rejects files with a version below `1.0`. |
 
-`noisegen` reads only `Fs`, `alpha`, `beta`, and `version`; it generates the noise at `Fs` and resamples it to the requested rate. `beta` is normalized so that the noise powers of the $M$ elements sum to $M$; each element keeps its measured power relative to the others. When $\alpha < 2$ the variance is undefined, and the pseudo-power $2c^2$, with $c$ the scale parameter, takes its place. The noise generation function `noisegen` uses the mixing equation:
+`noisegen` reads only `Fs`, `alpha`, `beta`, and `version`; it generates the noise at `Fs` and resamples it to the requested rate. `beta` is normalized over the whole array: the expected noise powers of all $M$ elements sum to $M$, and each element keeps its measured power relative to the others. The noise generated for a subset of elements (`array_index`) therefore need not sum to the size of the subset. When $\alpha < 2$ the variance is undefined, and the pseudo-power $2c^2$, with $c$ the scale parameter, takes its place. The noise generation function `noisegen` uses the mixing equation:
 
 $$\hat{n}_i(nT_s) = \sum_{j=0}^{M-1}\sum_{k=0}^{L}\beta_{ij}(kT_s)\,\eta_j(nT_s + kT_s)$$
 
