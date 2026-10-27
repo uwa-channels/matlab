@@ -5,6 +5,14 @@ on:
     paths:
       - 'src/*.m'
       - 'tests/*.m'
+      - 'examples/*.m'
+      - 'packaging/**'
+      - 'VERSION'
+      - '.github/workflows/ci.yml'
+  # Weekly, so a new MATLAB release that breaks the tests or the packaging is
+  # caught even when nothing is pushed.
+  schedule:
+    - cron: '0 6 * * 1'
 env:
   MLM_LICENSE_TOKEN: ${{ secrets.MLM_LICENSE_TOKEN }}
 jobs:
@@ -47,3 +55,27 @@ jobs:
         with:
           file: code-coverage/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Builds the .mltbx the way the release workflow does, on the latest MATLAB,
+  # so a change in MATLAB's packaging API fails here instead of at release time.
+  package_latest:
+    name: Package-latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+      - name: Build .mltbx
+        uses: matlab-actions/run-command@v2
+        with:
+          command: addpath('packaging'); buildToolbox
+      - name: Verify the package installs
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            tbx = matlab.addons.install(fullfile(pwd, 'build', 'uwa-channels.mltbx'));
+            disp(tbx);
+            assert(~isempty(which('replay')), 'replay is not on the path after install');
+            assert(~isempty(which('noisegen')), 'noisegen is not on the path after install');
+            assert(~isempty(which('unpack')), 'unpack is not on the path after install');

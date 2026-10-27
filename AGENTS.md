@@ -17,7 +17,8 @@ matlab -batch "addpath('src'); assertSuccess(runtests('tests'))"
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same suite on R2021a and on the latest
-release, with the Signal Processing Toolbox.  Keep the code working on R2021a:
+release, with the Signal Processing Toolbox, and builds and installs the
+`.mltbx` on the latest release; it also runs weekly.  Keep the code working on R2021a:
 do not use functions or syntax introduced after it.  The tests use
 `matlab.unittest`.  The toolbox supports MATLAB only; `src/` relies on
 MATLAB's `resample` with the `'Dimension'` option, which Octave lacks.
@@ -50,7 +51,8 @@ code.
 ## Releases
 
 A tag `vX.Y.Z` that matches `VERSION` runs `.github/workflows/release.yml`,
-which builds the `.mltbx` and attaches it to a GitHub release.  When you change
+which builds the `.mltbx` on the latest release, checks that it installs on
+R2021a too, and attaches it to a GitHub release.  When you change
 `VERSION`, change `version` in `CITATION.cff` to the same value.
 
 ## Citation

@@ -12,6 +12,8 @@ jobs:
   mltbx:
     name: Package toolbox
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -56,14 +58,58 @@ jobs:
           name: uwa-channels-mltbx
           path: build/*.mltbx
 
+  # The package is built on the latest MATLAB, but the toolbox supports
+  # R2021a.  Installing it there checks that a package built on a newer
+  # release still installs on the oldest supported one.
+  install_r2021a:
+    name: Install on R2021a
+    needs: mltbx
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the package
+        uses: actions/download-artifact@v4
+        with:
+          name: uwa-channels-mltbx
+          path: build
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          release: R2021a
+
+      - name: Verify the package installs and the functions are on the path
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            tbx = matlab.addons.install(fullfile(pwd, 'build', 'uwa-channels-${{ needs.mltbx.outputs.version }}.mltbx'));
+            disp(tbx);
+            assert(~isempty(which('replay')), 'replay is not on the path after install');
+            assert(~isempty(which('noisegen')), 'noisegen is not on the path after install');
+            assert(~isempty(which('unpack')), 'unpack is not on the path after install');
+
+  publish:
+    name: Publish release
+    needs: [mltbx, install_r2021a]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the package
+        uses: actions/download-artifact@v4
+        with:
+          name: uwa-channels-mltbx
+          path: build
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+
       # Publishes two assets: uwa-channels-<version>.mltbx for the archive, and
       # uwa-channels.mltbx under the fixed name that
       # /releases/latest/download/uwa-channels.mltbx resolves to.  The second
       # one is what makes the documented install command version-independent.
       - name: Publish the GitHub release
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" build/*.mltbx --clobber
@@ -76,13 +122,12 @@ jobs:
       # freshly published release, so a broken install path fails the release
       # instead of reaching users.
       - name: Verify the documented one-line install
-        if: github.ref_type == 'tag'
         uses: matlab-actions/run-command@v2
         with:
           command: |
             url = 'https://github.com/${{ github.repository }}/releases/latest/download/uwa-channels.mltbx';
             tbx = matlab.addons.install(websave([tempname '.mltbx'], url));
             fprintf('installed %s %s\n', tbx.Name, tbx.Version);
-            assert(strcmp(tbx.Version, '${{ steps.version.outputs.version }}'), ...
-                'The latest release serves version %s, expected ${{ steps.version.outputs.version }}', tbx.Version);
+            assert(strcmp(tbx.Version, '${{ needs.mltbx.outputs.version }}'), ...
+                'The latest release serves version %s, expected ${{ needs.mltbx.outputs.version }}', tbx.Version);
             assert(~isempty(which('replay')), 'replay is not on the path after install');

@@ -25,12 +25,13 @@ Three things make that command work, and each one is easy to break:
 That is the whole release.  The `Release` workflow then:
 
 1. checks that the tag matches `VERSION`, failing rather than shipping a mislabeled package;
-2. builds `build/uwa-channels-<version>.mltbx` and the unversioned copy;
+2. builds `build/uwa-channels-<version>.mltbx` and the unversioned copy on the latest MATLAB;
 3. installs the built file and asserts `replay`, `noisegen`, and `unpack` land on the path;
-4. creates the GitHub release if it does not exist yet, or uploads to it if it does, attaching both `.mltbx` files;
-5. runs the README's install command against the published release and asserts the installed version equals the tag.
+4. installs the same file on R2021a, the oldest supported release, and asserts the same;
+5. creates the GitHub release if it does not exist yet, or uploads to it if it does, attaching both `.mltbx` files;
+6. runs the README's install command against the published release and asserts the installed version equals the tag.
 
-Step 5 means a broken install URL fails the release instead of reaching users.
+The release is published only if steps 1 to 4 pass, and step 6 means a broken install URL fails the release instead of reaching users.  CI also builds and installs the package on the latest MATLAB on every push that touches `src`, `examples`, `packaging`, or `VERSION`, and once a week, so a change in MATLAB's packaging API shows up before a release.
 
 ## Build locally
 
