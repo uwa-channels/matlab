@@ -10,16 +10,16 @@ classdef testNoise < matlab.unittest.TestCase
   %             (alpha < 2, beta mixing coefficients).
   %
   % Options 2 and 3 share a unified noise struct with fields:
-  %   Fs, R, alpha, beta, fc, rms_power, version.
+  %   Fs, R, alpha, beta, fc, version.
   % The stability index alpha determines the distribution:
   %   alpha == 2  => Gaussian (stabrnd reduces to Box-Muller).
   %   alpha <  2  => Symmetric alpha-stable (impulsive).
   % The beta mixing coefficients encode both the bandpass spectral
   % shaping and the per-channel power scaling: they are normalized so
-  % each channel carries unit pseudo-power (2*c^2, the alpha-stable
-  % scale measure that reduces to the variance when alpha = 2), i.e.
-  % the per-channel pseudo-powers summed over channels equal the
-  % channel count.
+  % the per-channel pseudo-powers (2*c^2, the alpha-stable scale
+  % measure that reduces to the variance when alpha = 2) sum to the
+  % channel count, while each channel keeps its own power relative to
+  % the others, as in the released noise files.
   %
   % The synthetic noise struct is modeled on real experimental
   % data (12-element ULA, 65 mixing taps, Fs=39062.5 Hz,
@@ -45,6 +45,10 @@ classdef testNoise < matlab.unittest.TestCase
   %                     on real experimental data.
   %   - Oct. 15, 2026: Exact mixing checks: transpose, time direction,
   %                     array_index mapping, SaS scale, resampling.
+  %   - Oct. 26, 2026: The synthetic beta gives the channels unequal
+  %                     powers that sum to M, as the released files do,
+  %                     and the scaling tests check that noisegen keeps
+  %                     each channel's power.  Removed rms_power.
 
   properties (Constant)
     fs = 48000;
@@ -228,19 +232,22 @@ classdef testNoise < matlab.unittest.TestCase
     end
 
     function testOption2_rms_scaling(testCase)
-      % Scaling is now controlled by the beta mixing coefficients, which
-      % are normalized so the generated noise carries unit power per
-      % channel. The total variance summed over channels should therefore
-      % equal the number of channels.
+      % Scaling is controlled by the beta mixing coefficients, which are
+      % normalized so the channel powers sum to the number of channels.
+      % noisegen must not rescale them: each channel keeps the power its
+      % row of beta gives it, sum over j and k of beta(i, j, k)^2.
       noise = make_noise_struct(2);
       M = size(noise.beta, 1);
       input_size = [testCase.N, M];
       w = noisegen(input_size, testCase.fs, 1:M, noise);
 
-      total_var = sum(var(w));   % expect ~M for unit power per channel
+      total_var = sum(var(w));   % expect ~M
+      expected = sum(sum(noise.beta.^2, 3), 2).';
 
       testCase.verifyEqual(total_var, M, 'RelTol', 0.15, ...
         sprintf('sum(var) = %.2f, expected ~%d', total_var, M));
+      testCase.verifyEqual(var(w), expected, 'RelTol', 0.1, ...
+        'noisegen should keep the per-channel powers set by beta');
     end
 
     function testOption2_bandpass(testCase)
@@ -353,8 +360,8 @@ classdef testNoise < matlab.unittest.TestCase
       % For impulsive (alpha < 2) noise the variance is undefined, so power
       % is quantified by the alpha-stable pseudo-power 2*c^2, where c is the
       % scale parameter; it reduces to the variance when alpha = 2 [Chitre
-      % 2007].  beta is normalized so each channel carries unit pseudo-power,
-      % hence the pseudo-powers summed over channels equal the channel count.
+      % 2007].  beta is normalized so the pseudo-powers summed over channels
+      % equal the channel count.
       alpha = 1.9;
       noise = make_noise_struct(alpha);
       M = size(noise.beta, 1);
@@ -691,20 +698,19 @@ end
 
 rng(rng_state);  % Restore RNG state
 
-% --- Normalize each channel to unit pseudo-power ---
+% --- Normalize the pseudo-powers to sum to M ---
 % Power is quantified by the alpha-stable pseudo-power 2*c^2, where c is
 % the scale parameter; it reduces to the variance when alpha = 2.  With
-% unit-scale drivers, channel i is SaS with c_i^alpha proportional to
-% sum_{j,k} |beta(i,j,k)|^alpha, so scaling each channel's taps to unit
-% alpha-norm yields unit pseudo-power.  The pseudo-powers then sum to M
-% (the number of channels).  For alpha = 2 this is the L2 (energy) norm.
+% drivers of scale 1/sqrt(2), channel i is SaS with pseudo-power
+% (sum_{j,k} |beta(i,j,k)|^alpha)^(2/alpha), so scaling each channel's
+% taps to unit alpha-norm gives it unit pseudo-power, and a further
+% sqrt(g(i)) gives it pseudo-power g(i).  g varies mildly across the
+% elements (ratio max/min ~ 1.5) and sums to M, as in the released files.
+% For alpha = 2 this is the L2 (energy) norm.
+g = 1 + 0.2 * linspace(-1, 1, M).';
 for i = 1:M
-  beta(i, :, :) = beta(i, :, :) / sum(abs(beta(i, :, :)).^alpha, 'all')^(1/alpha);
+  beta(i, :, :) = sqrt(g(i)) * beta(i, :, :) / sum(abs(beta(i, :, :)).^alpha, 'all')^(1/alpha);
 end
-
-% --- Per-channel RMS power ---
-% Mild variation across elements (ratio max/min ~ 1.3)
-rms_power = 3.2e-4 * (1 + 0.1 * linspace(-1, 1, M).');
 
 noise = struct();
 noise.Fs = Fs;
@@ -712,7 +718,6 @@ noise.R = R;
 noise.alpha = alpha;
 noise.beta = beta;
 noise.fc = fc;
-noise.rms_power = rms_power;
 noise.version = 1.0;
 end
 

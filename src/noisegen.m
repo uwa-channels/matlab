@@ -18,10 +18,13 @@ function w = noisegen(input_size, fs, varargin)
 %   alpha     - Stability index of the S-alpha-S distribution (2 = Gaussian).
 %   beta      - Mixing coefficients, size [M x M x K].
 %   fc        - Center frequency [Hz].
-%   rms_power - Per-channel RMS (std) of the unscaled mixed+bandpassed noise,
-%               size [M x 1]. Generation divides by this so each output
-%               channel has unit power and the summed power equals M.
 %   version   - Noise struct version (>= 1.0).
+%
+% BETA is normalized so that the noise (pseudo-)powers of the M elements sum
+% to M, and each element keeps its measured power relative to the others.
+% For alpha < 2 the pseudo-power 2*c^2, with c the scale parameter, takes
+% the place of the variance.  The pink noise of NOISEGEN(INPUT_SIZE, FS)
+% instead has unit power on every element.
 %
 % ARRAY_INDEX specifies the indices of the receiver elements through which
 % the user would like to generate noise. These indices must match those
@@ -61,6 +64,10 @@ function w = noisegen(input_size, fs, varargin)
 %                    fftfilt (FFT overlap-add) across all channels; mixing
 %                    uses conv2 per output channel instead of a per-tap
 %                    slice-copy matmul loop. Output is unchanged.
+%   - Oct. 26, 2026: Removed rms_power from the noise struct description;
+%                    the released files do not carry it and generation never
+%                    read it.  Dropped the 'Dimension' option of resample,
+%                    which Octave's signal package does not accept.
 %
 
 
@@ -160,7 +167,7 @@ for i = 1:Nout
   w(:, i) = wi(1:K);
 end
 
-w = resample(w, p, q, 'Dimension', 1);
+w = resample(w, p, q);
 w = w(1:input_size(1), :);
 end
 

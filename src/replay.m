@@ -52,6 +52,9 @@ function output = replay(input, fs, array_index, channel, varargin)
 %                    sit at (start-1 : start+N-2)/fs_delay, so every output
 %                    sample carried a phase one sample of fs_delay too early.
 %                    unpack.m already used the correct origin.
+%   - Oct. 26, 2026: Dropped the 'Dimension' option of resample, which
+%                    Octave's signal package does not accept.  resample
+%                    already works column by column, so output is unchanged.
 %
 
 %% Simple checks
@@ -113,12 +116,12 @@ for m = 1:M
 end
 
 %% Resample to match the original sampling rate and upshift to fc
-output = resample(output, q, p, 'Dimension', 1);
+output = resample(output, q, p);
 output = 2 .* real(output .*exp(2j*pi*fc*(0:size(output, 1) - 1).'/fs));
 
 if isfield(channel, 'f_resamp')
     [p2, q2] = rat(channel.f_resamp);
-    output = resample(output, p2, q2, 'Dimension', 1);
+    output = resample(output, p2, q2);
 end
 
 end

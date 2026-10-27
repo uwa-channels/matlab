@@ -68,7 +68,7 @@ Download the channel MAT-files from [Zenodo](https://doi.org/10.5281/zenodo.2128
 
 ```matlab
 channel = load('blue_1.mat');
-noise = load('blue_1_noise.mat');
+noise = load('blue_noise.mat');
 
 array_index = [1, 2, 3];
 y = replay(input, fs, array_index, channel);
@@ -108,8 +108,9 @@ Each noise MAT-file contains:
 | `alpha` | Stability index (2 = Gaussian, < 2 = impulsive) |
 | `beta` | Mixing coefficients, size (M × M × K) |
 | `fc` | Center frequency [Hz] |
-| `rms_power` | Per-channel RMS power scaling, size (M × 1) |
 | `version` | Noise struct version |
+
+`beta` is normalized so that the noise powers of the M elements sum to M; each element keeps its measured power relative to the others.
 
 ## Tests
 
@@ -118,7 +119,7 @@ This repository includes automated testing via [GitHub Actions](https://github.c
 | Test | What it verifies |
 |------|-----------------|
 | `testReplay` | Generates random mobile channels ({static, mobile} × {theta\_hat, phi\_hat}), transmits a signal, and checks that cross-correlation peaks match the true multipath structure; also checks that `array_index` isolates individual hydrophones and that the output power scaling is O(1). |
-| `testNoise` | Verifies output size, spectral shape (17 dB/decade), spatial correlation (theoretical vs. sample), bandpass filtering, rms\_power scaling, Gaussianity (α = 2), and heavy-tail behavior (α < 2). |
+| `testNoise` | Verifies output size, spectral shape (17 dB/decade), spatial correlation (theoretical vs. sample), bandpass filtering, per-channel power scaling by `beta`, Gaussianity (α = 2), and heavy-tail behavior (α < 2). |
 | `testUnpack` | Tests all tracking modes (none, theta\_hat, phi\_hat, f\_resamp, and combinations) for correct impulse response reconstruction. |
 
 Tests run automatically on every push, ensuring continued correctness of the core functions.
