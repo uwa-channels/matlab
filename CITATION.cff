@@ -15,7 +15,7 @@ authors:
 repository-code: "https://github.com/uwa-channels/matlab"
 url: "https://uwa-channels.github.io"
 license: MIT
-version: "1.0.1"
+version: "1.0.2"
 keywords:
   - "underwater acoustics"
   - "underwater acoustic communication"
