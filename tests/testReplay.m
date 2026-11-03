@@ -1,14 +1,14 @@
 classdef testReplay < matlab.unittest.TestCase
     % TESTREPLAY Unit tests for replay.m
     %
-    % Tests {static, mobile} x {theta_hat, phi_hat, f_resamp} across various
-    % speed configurations.
+    % Tests {static, mobile} x {theta_hat, phi_hat} across various speed
+    % configurations, and f_resamp (bulk Doppler, Watermark) with one factor
+    % per hydrophone.
     %
     %   theta_hat: phase tracking only. h_hat drifts with motion.
     %   phi_hat:   phase + delay tracking. h_hat is static.
-    %   f_resamp:  bulk Doppler (Watermark). h_hat is static.
-    %     Can appear alone (tracking='none') or combined with theta/phi for
-    %     residual motion. Mirrors the convention in testUnpack Cases 6–8.
+    %   f_resamp:  testVectorFResamp, testVectorFResampSharedCIR and
+    %              testFResampLengthChecked.
     %
     % Other m-files required: replay.m
     % Subfunctions: place_taps, compensate_doppler, randsamples
@@ -26,6 +26,10 @@ classdef testReplay < matlab.unittest.TestCase
     %   - Feb. 27, 2026: Initial release.
     %   - Jul. 10, 2026: Added testReplayPower: channel-isolation and
     %                    output-power checks for the array_index API.
+    %   - Nov.  3, 2026: Added testVectorFResamp and testFResampLengthChecked
+    %                    for one resampling factor per hydrophone, and
+    %                    testVectorFResampSharedCIR, which draws them.
+    %                    Removed the scalar f_resamp (Watermark) cases.
 
     properties (Constant)
         c = 1500;
@@ -154,30 +158,6 @@ classdef testReplay < matlab.unittest.TestCase
             'coeff', 1.5, 'd', 0.5, 'channel_time', 5, ...
             'tracking', 'phi', ...
             'v_const', 4, 'v_amp', 1.2, 'n_cycles', 3), ...
-            ...
-            ... %% === Watermark (f_resamp) — mirrors testUnpack Cases 6–8 ===
-            ...
-            struct( ... % Case 15: f_resamp only, static h_hat
-            'label', 'watermark_f_resamp_only', ...
-            'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 20, ...
-            'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
-            'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
-            'tracking', 'none', 'has_f_resamp', true, ...
-            'v_const', 2, 'v_amp', 0, 'n_cycles', 0), ...
-            struct( ... % Case 16: f_resamp handles bulk, theta_hat = residual
-            'label', 'watermark_f_resamp_theta', ...
-            'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 100, ...
-            'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
-            'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
-            'tracking', 'theta', 'has_f_resamp', true, ...
-            'v_const', 2, 'v_amp', 1, 'n_cycles', 3), ...
-            struct( ... % Case 17: f_resamp handles bulk, phi_hat = residual
-            'label', 'watermark_f_resamp_phi', ...
-            'fc', 15e3, 'fs_delay', 16e3, 'fs_time', 20, ...
-            'M', 3, 'n_path', 10, 'R', 4e3, 'Tmp', 20e-3, ...
-            'coeff', 1, 'd', 0.5, 'channel_time', 5, ...
-            'tracking', 'phi', 'has_f_resamp', true, ...
-            'v_const', 2, 'v_amp', -1, 'n_cycles', 3), ...
             };
     end
 
@@ -238,19 +218,11 @@ classdef testReplay < matlab.unittest.TestCase
             L = ceil(p.fs_delay * p.Tmp * 1.5);
             has_motion = (p.v_const ~= 0) || (p.v_amp ~= 0);
 
-            % Delay drift carried by the taps. With f_resamp present, the bulk
-            % drift from v_const is absorbed by resampling, so h_hat drifts only
-            % with the residual sway.
-            dtau_h = dtau_snap;
-            if isfield(p, 'has_f_resamp') && p.has_f_resamp
-                dtau_h = dtau_snap - (p.v_const / c) * t_snapshots;
-            end
-
             if strcmp(p.tracking, 'theta') && has_motion
                 h_hat = zeros(L, p.M, N_time);
                 for k = 1:N_time
                     h_hat(:, :, k) = place_taps(L, p.M, ...
-                        path_delay_0 + dtau_h(k), ...
+                        path_delay_0 + dtau_snap(k), ...
                         c_p, p.Tmp, p.fs_delay);
                 end
             else
@@ -267,19 +239,11 @@ classdef testReplay < matlab.unittest.TestCase
             channel.params.fc = p.fc;
             channel.version = 1.0;
 
-            phi_tracking = phi;
-            if isfield(p, 'has_f_resamp') && p.has_f_resamp
-                phi_tracking = phi_sin;
-            end
-
             switch p.tracking
                 case 'theta'
-                    channel.theta_hat = repmat(phi_tracking, p.M, 1);
+                    channel.theta_hat = repmat(phi, p.M, 1);
                 case 'phi'
-                    channel.phi_hat = repmat(phi_tracking, p.M, 1);
-            end
-            if isfield(p, 'has_f_resamp') && p.has_f_resamp
-                channel.f_resamp = 1 / (1 + p.v_const / c);
+                    channel.phi_hat = repmat(phi, p.M, 1);
             end
 
             %% 5. Transmit signal
@@ -300,10 +264,6 @@ classdef testReplay < matlab.unittest.TestCase
                     phi_field = channel.phi_hat;
                 otherwise
                     phi_field = zeros(p.M, length(t_delay));
-            end
-            if isfield(p, 'has_f_resamp') && p.has_f_resamp
-                phi_field = phi_field + (1/channel.f_resamp - 1) * 2*pi*p.fc ...
-                    * repmat(t_delay, p.M, 1);
             end
 
             %% 8. Cross-correlation and verification
@@ -336,8 +296,21 @@ classdef testReplay < matlab.unittest.TestCase
             v_inst = -dphi / (dt * 2 * pi * p.fc) * c;
             t_speed = (0:length(v_inst)-1) / p.fs_delay;
             plot(t_speed, v_inst);
+            % A constant speed differs from sample to sample only by rounding
+            % error (~1e-12 m/s); a span of at least 1 m/s keeps the axis from
+            % zooming in on it.
+            v_mid = (max(v_inst) + min(v_inst)) / 2;
+            v_half = max(0.55 * (max(v_inst) - min(v_inst)), 0.5);
+            ylim(v_mid + [-v_half, v_half]);
             xlabel('Time [s]'); ylabel('Speed [m/s]');
-            title('Instantaneous speed (from \phi)');
+            switch p.tracking
+                case 'theta'
+                    title('Instantaneous speed (from \theta)');
+                case 'phi'
+                    title('Instantaneous speed (from \phi)');
+                otherwise
+                    title('Instantaneous speed (no tracking field)');
+            end
             grid on;
             hold on;
             xline(t_replay_start, 'r--', 'LineWidth', 1.5);
@@ -582,6 +555,187 @@ classdef testReplay < matlab.unittest.TestCase
                 (T + L) * up, 'no tracking: output length');
         end
 
+        function testVectorFResamp(testCase)
+            % f_resamp may hold one factor per hydrophone.  Each column of the
+            % output must then equal a replay through that hydrophone alone
+            % with its factor as a scalar, zero-padded to the longest column.
+            % A vector of equal factors must give the same output as the
+            % scalar, and array_index must pick the factors of the
+            % hydrophones it selects, in its order.
+
+            fs = 48e3; start = testCase.start;
+            fc = 12e3; fs_delay = 10e3; fs_time = 20; L = 64; N_time = 100;
+            M = 3;
+            h_hat = zeros(L, M, N_time);
+            h_hat(10, 1, :) = 1;
+            h_hat([12, 30], 2, :) = repmat([0.8; 0.4j], 1, 1, N_time);
+            h_hat([8, 21, 40], 3, :) = repmat([1; -0.5; 0.3j], 1, 1, N_time);
+            channel = struct();
+            channel.h_hat = h_hat;
+            channel.version = 1.0;
+            channel.params = struct('fs_delay', fs_delay, 'fs_time', fs_time, 'fc', fc);
+            t = (0:N_time/fs_time*fs_delay - 1) / fs_delay;
+            channel.phi_hat = repmat(-2 * pi * fc * 1e-4 * t, M, 1);
+
+            x = cos(2 * pi * fc * (0:0.5*fs-1).' / fs) .* hann(0.5*fs);
+            f_resamp = 1 ./ (1 + [2e-3; -1e-3; 4e-3]);
+
+            % Each column against a single-hydrophone, scalar-factor replay.
+            channel.f_resamp = f_resamp;
+            for index = {1:M, [3, 1]}
+                array_index = index{1};
+                r = replay(x, fs, array_index, channel, start);
+                lengths = zeros(1, numel(array_index));
+                for k = 1:numel(array_index)
+                    m = array_index(k);
+                    single = channel;
+                    single.h_hat = channel.h_hat(:, m, :);
+                    single.phi_hat = channel.phi_hat(m, :);
+                    single.f_resamp = f_resamp(m);
+                    r_m = replay(x, fs, 1, single, start);
+                    lengths(k) = numel(r_m);
+                    n = lengths(k);
+                    err = max(abs(r(1:n, k) - r_m)) / max(abs(r_m));
+                    testCase.verifyLessThan(err, 1e-10, sprintf(['Column %d ', ...
+                        '(hydrophone %d) of replay(..., %s, ...) differs from ', ...
+                        'hydrophone %d replayed alone with f_resamp = %.6f ', ...
+                        '(relative err = %.2e).'], k, m, mat2str(array_index), ...
+                        m, f_resamp(m), err));
+                    testCase.verifyEqual(r(n+1:end, k), zeros(size(r, 1) - n, 1), ...
+                        sprintf('Column %d is not zero-padded past its end.', k));
+                end
+                testCase.verifyEqual(size(r, 1), max(lengths), ...
+                    'The output is not as long as its longest column.');
+                testCase.verifyGreaterThan(numel(unique(lengths)), 1, ...
+                    'The factors are too close to change the column lengths.');
+            end
+
+            % Equal factors as a row vector give the scalar result.
+            channel.f_resamp = f_resamp(1);
+            r_scalar = replay(x, fs, 1:M, channel, start);
+            channel.f_resamp = repmat(f_resamp(1), 1, M);
+            r_vector = replay(x, fs, 1:M, channel, start);
+            testCase.verifyEqual(size(r_vector), size(r_scalar));
+            testCase.verifyLessThan(max(abs(r_vector - r_scalar), [], 'all') ...
+                / max(abs(r_scalar), [], 'all'), 1e-12, ...
+                'A vector of equal factors differs from the scalar factor.');
+        end
+
+        function testVectorFResampSharedCIR(testCase)
+            % Three hydrophones share one static CIR and differ only in
+            % f_resamp, so any difference between their outputs comes from
+            % f_resamp alone.  replay resamples column m by f_resamp(m), which
+            % stretches it in time by that factor: a column is f_resamp(m)
+            % times as long as without it, and two events D seconds apart
+            % come out f_resamp(m)*D apart.
+            %
+            % The input is two short bursts at fc, D seconds apart.  The test
+            % checks each column's length and burst spacing against the
+            % factor, and the figure shows them: on the left the whole column,
+            % with its end marked and its length labelled; on the right the
+            % second burst, with where it falls without f_resamp (dashed) and
+            % how far f_resamp moves it.
+
+            fs = 48e3; start = testCase.start;
+            fc = 12e3; fs_delay = 8e3; fs_time = 20; L = 64; N_time = 100;
+            M = 3;
+            taps = zeros(L, 1);
+            taps([10, 18, 30]) = [1; 0.5 - 0.3j; 0.25j];
+            channel = struct();
+            channel.h_hat = repmat(taps, [1, M, N_time]);
+            channel.version = 1.0;
+            channel.params = struct('fs_delay', fs_delay, 'fs_time', fs_time, 'fc', fc);
+
+            % Two 2-ms bursts, D = 0.4 s apart, in 0.5 s of input.
+            b = 2e-3 * fs;
+            burst = cos(2 * pi * fc * (0:b-1).' / fs) .* hann(b);
+            x = zeros(0.5 * fs, 1);
+            n1 = 0.05 * fs; D = 0.4;
+            x(n1 + (1:b)) = burst;
+            x(n1 + D * fs + (1:b)) = burst;
+
+            % Without f_resamp, as the reference.
+            r0 = replay(x, fs, 1, channel, start);
+            q0 = burst_peaks(r0);
+            len0 = numel(r0);
+
+            excess = [1e-2; -1e-2; -3e-2];               % 1/f_resamp - 1
+            f_resamp = 1 ./ (1 + excess);
+            channel.f_resamp = f_resamp;
+            r = replay(x, fs, 1:M, channel, start);
+
+            figure('Name', 'vector_f_resamp_replay');
+            lengths = zeros(M, 1);
+            for m = 1:M
+                single = channel;
+                single.h_hat = channel.h_hat(:, m, :);
+                single.f_resamp = f_resamp(m);
+                lengths(m) = numel(replay(x, fs, 1, single, start));
+                q = burst_peaks(r(1:lengths(m), m));
+
+                testCase.verifyLessThan(abs(lengths(m) - len0 * f_resamp(m)), 2, ...
+                    sprintf(['Hydrophone %d: the column is %d samples long, ', ...
+                    'not f_resamp * %d = %.1f.'], m, lengths(m), len0, ...
+                    len0 * f_resamp(m)));
+                testCase.verifyLessThan(abs(diff(q) - diff(q0) * f_resamp(m)), 2, ...
+                    sprintf(['Hydrophone %d: the bursts are %d samples apart, ', ...
+                    'not f_resamp * %d = %.1f.'], m, diff(q), diff(q0), ...
+                    diff(q0) * f_resamp(m)));
+
+                env = abs(hilbert(r(:, m)));
+                env = env / max(env);
+                t = (0:numel(env) - 1).' / fs;
+
+                % Whole column, its end marked and its length labelled.
+                subplot(M, 2, 2*m - 1);
+                plot(t, env); hold on;
+                xline(lengths(m) / fs, 'r-', 'LineWidth', 1.5);
+                xline(len0 / fs, '--', 'Color', [0.5 0.5 0.5], 'LineWidth', 1.5);
+                xlim([0, size(r, 1) / fs * 1.02]); ylim([0, 1.1]);
+                ylabel('|r|'); grid on;
+                title(sprintf(['Hydrophone %d: f_{resamp} = 1/(1%+.0e), ', ...
+                    'length %d (%d without)'], m, excess(m), lengths(m), len0));
+                if m == M, xlabel('Time [s]'); end
+
+                % Second burst, without f_resamp (dashed) and with it.
+                subplot(M, 2, 2*m);
+                plot(t * 1e3, env); hold on;
+                xline(q0(2) / fs * 1e3, '--', 'Color', [0.5 0.5 0.5], 'LineWidth', 1.5);
+                xline(q(2) / fs * 1e3, 'r-');
+                shift = (q(2) - q0(2)) / fs * 1e3;
+                plot([q0(2), q(2)] / fs * 1e3, [1.05, 1.05], 'r-', 'LineWidth', 2);
+                text((q0(2) + q(2)) / 2 / fs * 1e3, 0.85, ...
+                    sprintf('%+.2f ms', shift), 'Color', 'r', ...
+                    'HorizontalAlignment', 'center', 'FontWeight', 'bold');
+                xlim(q0(2) / fs * 1e3 + [-8, 20]); ylim([0, 1.15]);
+                grid on;
+                title(sprintf('Second burst moves by %+.2f ms', shift));
+                if m == M, xlabel('Time [ms]'); end
+            end
+            sgtitle(['Same CIR, different f_{resamp}: each column is stretched ', ...
+                'by its own factor (dashed: without f_{resamp})']);
+
+            testCase.verifyEqual(numel(unique(lengths)), M, ...
+                'The columns should all have different lengths.');
+            testCase.verifyEqual(size(r, 1), max(lengths), ...
+                'The output is not as long as its longest column.');
+        end
+
+        function testFResampLengthChecked(testCase)
+            % A vector f_resamp must have one factor per hydrophone in the
+            % file, whatever array_index selects.
+            channel = drift_channel(13e3, 8e3, 40, 64, 1e-4);
+            channel.h_hat = repmat(channel.h_hat, 1, 3, 1);
+            channel.phi_hat = repmat(channel.phi_hat, 3, 1);
+            channel.f_resamp = [1, 1];
+            x = randn(0.1 * 96e3, 1);
+            testCase.verifyError(@() replay(x, 96e3, 1, channel, 1001), ...
+                'replay:invalidFResamp');
+            channel.f_resamp = [1, -1, 1];
+            testCase.verifyError(@() replay(x, 96e3, 1, channel, 1001), ...
+                'replay:invalidFResamp');
+        end
+
         function testRandomStartStaysInRange(testCase)
             % Without a start, replay draws one at random.  With the input
             % nearly as long as the channel allows, the valid starts are a
@@ -606,6 +760,15 @@ end
 
 
 %% Helpers
+
+function peaks = burst_peaks(r)
+% Sample indices of the two burst peaks in R, one in each half of it.
+env = abs(hilbert(r));
+half = round(numel(env) / 2);
+[~, p1] = max(env(1:half));
+[~, p2] = max(env(half+1:end));
+peaks = [p1, p2 + half];
+end
 
 function channel = drift_channel(fc, fs_delay, N_time, L, rate)
 % A single-tap channel whose delay drifts at RATE seconds per second, held

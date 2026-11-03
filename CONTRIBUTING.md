@@ -88,9 +88,9 @@ size(theta_hat, 2) / params.fs_delay == size(h_hat, 3) / params.fs_time
 
 ### `f_resamp`
 
-* **Type**: Scalar (double precision)
+* **Type**: Scalar, or vector of size `[receiver, 1]` or `[1, receiver]` (double precision)
 * **Units**: Unitless resampling factor
-* **Description**: A time-invariant resampling factor applied to the output signal. This is typically the inverse of a resampling operation applied to remove the nominal Doppler frequency offset before channel estimation. `replay` applies it after the time-varying convolution, by resampling the output. `unpack` instead converts it into a linear phase ramp $(1/f_{\text{resamp}} - 1)\,2\pi f_c t$, which it reinserts as both a phase and a delay drift, in the same way as `phi_hat`.
+* **Description**: A time-invariant resampling factor applied to the output signal. A scalar applies to every receiver; a vector holds one factor per receiver, in the order of the second dimension of `h_hat`, and is indexed by `array_index` like the rows of `phi_hat`. `replay` resamples each output column by its own factor and zero-pads the shorter columns to the longest. This is typically the inverse of a resampling operation applied to remove the nominal Doppler frequency offset before channel estimation. `replay` applies it after the time-varying convolution, by resampling the output. `unpack` instead converts it into a linear phase ramp $(1/f_{\text{resamp}} - 1)\,2\pi f_c t$, which it reinserts as both a phase and a delay drift, in the same way as `phi_hat`.
 
 ### `meta`
 

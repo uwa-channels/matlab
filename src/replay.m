@@ -59,6 +59,11 @@ function output = replay(input, fs, array_index, channel, varargin)
 %                    off.  The fixed 20-sample buffer is replaced by one
 %                    sized to the largest delay in the window, so the output
 %                    length matches the Python package.
+%   - Nov.  3, 2026: f_resamp may be a vector with one factor per
+%                    hydrophone in the file, indexed by array_index like the
+%                    rows of phi_hat; a scalar still applies to all of them.
+%                    Each column is resampled by its own factor and the
+%                    shorter ones are zero-padded to the longest.
 %
 
 %% Simple checks
@@ -137,9 +142,25 @@ end
 output = resample(output, q, p, 'Dimension', 1);
 output = 2 .* real(output .*exp(2j*pi*fc*(0:size(output, 1) - 1).'/fs));
 
+%% Bulk resampling, one factor per hydrophone
+% f_resamp holds one factor for every hydrophone in the file, or a single
+% factor for all of them.  The factors differ, so the columns come out with
+% different lengths; the shorter ones are zero-padded to the longest.
 if isfield(channel, 'f_resamp')
-    [p2, q2] = rat(channel.f_resamp);
-    output = resample(output, p2, q2, 'Dimension', 1);
+    f_resamp = channel.f_resamp(:);
+    if ~isscalar(f_resamp)
+        f_resamp = f_resamp(array_index);
+    end
+    f_resamp = repmat(f_resamp, M / numel(f_resamp), 1);
+    columns = cell(1, M);
+    for m = 1:M
+        [p2, q2] = rat(f_resamp(m));
+        columns{m} = resample(output(:, m), p2, q2);
+    end
+    output = zeros(max(cellfun(@numel, columns)), M);
+    for m = 1:M
+        output(1:numel(columns{m}), m) = columns{m};
+    end
 end
 
 end
@@ -168,6 +189,16 @@ assert(length(unique(index)) == length(index), ...
     'array_index must not contain duplicate indices.');
 assert(min(index) >= 1 && max(index) <= N, ...
     'array_index must be positive integers and cannot exceed %d.', N);
+
+% Check the resampling factors
+if isfield(channel, 'f_resamp')
+    f = channel.f_resamp;
+    assert(isnumeric(f) && isreal(f) && all(isfinite(f(:))) && all(f(:) > 0), ...
+        'replay:invalidFResamp', 'f_resamp must be positive and finite.');
+    assert(numel(f) == 1 || numel(f) == N, 'replay:invalidFResamp', ...
+        'f_resamp must be a scalar or have one factor per hydrophone (%d), not %d.', ...
+        N, numel(f));
+end
 end
 
 % [EOF]

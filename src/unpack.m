@@ -16,7 +16,9 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 %     Delay drift: drift = phi_hat / (2*pi*fc).
 %   f_resamp:
 %     Adds a linear phase ramp for bulk Doppler. Its delay contribution
-%     is always re-inserted via interpolation.
+%     is always re-inserted via interpolation. A scalar applies to every
+%     hydrophone; a vector holds one factor per hydrophone in the file and
+%     is indexed by ARRAY_INDEX.
 %
 % Inputs:
 %    fs                  - Desired sampling rate along time axis.
@@ -31,7 +33,7 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 %    See example_unpack.m.
 %
 % Other m-files required: None
-% Subfunctions: None
+% Subfunctions: validate_inputs
 % Toolbox required: Signal Processing Toolbox (for resample function).
 % MAT-files required: Channel MAT-file.
 %
@@ -61,7 +63,25 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 %                    offset, on every unpacked tap.
 %   - Oct. 27, 2026: phi_hat takes precedence over theta_hat when a file
 %                    carries both, as in replay.m; their phases used to add.
+%   - Nov.  3, 2026: f_resamp may be a vector with one factor per
+%                    hydrophone in the file, indexed by array_index; each
+%                    hydrophone gets its own phase ramp and delay drift.
+%                    Added validate_inputs, which checks the channel
+%                    version, fs, array_index, the buffers and f_resamp
+%                    before unpacking, as replay.m does.
 %
+
+%% Buffers and simple checks
+if nargin == 3
+    buffer_left = 0.1;
+    buffer_right = 0.1;
+else
+    assert(nargin == 5, 'unpack:invalidBuffer', ...
+        'Give both buffers, BUF_LEFT and BUF_RIGHT, or neither.');
+    buffer_left = varargin{1};
+    buffer_right = varargin{2};
+end
+validate_inputs(fs, array_index, channel, buffer_left, buffer_right);
 
 %% Unpacking variables
 params = channel.params;
@@ -91,23 +111,20 @@ elseif isfield(channel, 'theta_hat')
 end
 
 if isfield(channel, 'f_resamp')
+    % One factor per hydrophone in the file, or one for all of them.
+    f_resamp = channel.f_resamp(:);
+    if ~isscalar(f_resamp)
+        f_resamp = f_resamp(array_index);
+    end
     % Sample n of the trajectory is at (n-1)/fs_delay, the grid t_orig below
     % is built on, so the ramp has to start at zero and not at one sample in.
-    f_resamp_phase = (1 / channel.f_resamp - 1) * 2 * pi * fc ...
+    f_resamp_phase = (1 ./ f_resamp - 1) * 2 * pi * fc ...
         * (0:N_phi-1) / fs_delay;
     phase_all = phase_all + f_resamp_phase;
     phase_drift = phase_drift + f_resamp_phase;
 end
 
 %% Allocate buffer
-if nargin == 3
-    buffer_left = 0.1;
-    buffer_right = 0.1;
-else
-    buffer_left = varargin{1};
-    buffer_right = varargin{2};
-end
-
 h_hat = [zeros(ceil(K*buffer_left), M, T); h_hat; zeros(ceil(K*buffer_right), M, T)];
 K = size(h_hat, 1);
 
@@ -146,6 +163,44 @@ for m = 1:length(array_index)
     unpacked_channel(:, m, :) = h_resampled;
 end
 
+end
+
+
+function validate_inputs(fs, index, channel, buffer_left, buffer_right)
+% Channel version checking
+assert(channel.version >= 1.0, 'unpack:invalidVersion', ...
+    'The minimum version of the channel matrix is 1.0, and you have %.1f.', ...
+    channel.version);
+
+% Check the sampling rate
+assert(isnumeric(fs) && isscalar(fs) && isreal(fs) && isfinite(fs) && fs > 0, ...
+    'unpack:invalidFs', 'fs must be a positive, finite scalar.');
+
+% Check the hydrophone indices
+N = size(channel.h_hat, 2);
+assert(~isempty(index) && all(index == round(index)), ...
+    'unpack:invalidArrayIndex', 'array_index must be positive integers.');
+assert(length(unique(index)) == length(index), 'unpack:invalidArrayIndex', ...
+    'array_index must not contain duplicate indices.');
+assert(min(index) >= 1 && max(index) <= N, 'unpack:invalidArrayIndex', ...
+    'array_index must be positive integers and cannot exceed %d.', N);
+
+% Check the buffers
+for b = {buffer_left, buffer_right}
+    assert(isnumeric(b{1}) && isscalar(b{1}) && isreal(b{1}) ...
+        && isfinite(b{1}) && b{1} >= 0, 'unpack:invalidBuffer', ...
+        'The buffers must be non-negative, finite scalars.');
+end
+
+% Check the resampling factors
+if isfield(channel, 'f_resamp')
+    f = channel.f_resamp;
+    assert(isnumeric(f) && isreal(f) && all(isfinite(f(:))) && all(f(:) > 0), ...
+        'unpack:invalidFResamp', 'f_resamp must be positive and finite.');
+    assert(numel(f) == 1 || numel(f) == N, 'unpack:invalidFResamp', ...
+        'f_resamp must be a scalar or have one factor per hydrophone (%d), not %d.', ...
+        N, numel(f));
+end
 end
 
 % [EOF]
