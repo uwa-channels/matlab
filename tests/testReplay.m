@@ -17,7 +17,7 @@ classdef testReplay < matlab.unittest.TestCase
     %
     % See also: replay.m, est.m
     %
-    % Author: Zhengnan Li, Claude (Opus 4.6)
+    % Author: Zhengnan Li, Claude
     % Email : uwa-channels@ofdm.link
     %
     % License: MIT
