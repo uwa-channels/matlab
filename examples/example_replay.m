@@ -36,7 +36,7 @@ input = [zeros(round(fs/10), 1); passband; zeros(round(fs/10), 1);];
 %% Replay and generate noise
 y = replay(input, fs, array_index, channel);
 if textbook_noise
-    w = noisegen(size(y), fs);
+    w = noisegen(size(y), fs); %#ok<UNRCH> % textbook_noise is a switch set above
 else
     w = noisegen(size(y), fs, array_index, noise);
 end

@@ -291,15 +291,15 @@ function x = stabrnd(alpha, beta, c, delta, m, n)
 %   _Handbook of Statistics_ Vol. 14, forthcoming early 1997.
 
 % Errortraps:
-if alpha < .1 | alpha > 2
+if alpha < .1 || alpha > 2
     disp('Alpha must be in [.1,2] for function STABRND.')
-    alpha
+    disp(alpha)
     x = NaN * zeros(m, n);
     return
 end
 if abs(beta) > 1
     disp('Beta must be in [-1,1] for function STABRND.')
-    beta
+    disp(beta)
     x = NaN * zeros(m, n);
     return
 end

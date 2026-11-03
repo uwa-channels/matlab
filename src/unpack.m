@@ -130,7 +130,6 @@ K = size(h_hat, 1);
 
 %% Sample rate conversion
 [p1, q1] = rat(fs_time_desired / fs_time);
-[p2, q2] = rat(fs_time_desired / fs_delay);
 delays = (0:K-1) ./ fs_delay;
 
 %% Unpack
@@ -197,7 +196,7 @@ if isfield(channel, 'f_resamp')
     f = channel.f_resamp;
     assert(isnumeric(f) && isreal(f) && all(isfinite(f(:))) && all(f(:) > 0), ...
         'unpack:invalidFResamp', 'f_resamp must be positive and finite.');
-    assert(numel(f) == 1 || numel(f) == N, 'unpack:invalidFResamp', ...
+    assert(isscalar(f) || numel(f) == N, 'unpack:invalidFResamp', ...
         'f_resamp must be a scalar or have one factor per hydrophone (%d), not %d.', ...
         N, numel(f));
 end

@@ -33,7 +33,7 @@ classdef testReplay < matlab.unittest.TestCase
 
     properties (Constant)
         c = 1500;
-        fs = 48e3;
+        fs_tx = 48e3;
         start = 1000;
     end
 
@@ -172,7 +172,7 @@ classdef testReplay < matlab.unittest.TestCase
         function testReplayFunction(testCase, params)
 
             c = testCase.c;
-            fs = testCase.fs;
+            fs = testCase.fs_tx;
             start = testCase.start;
             p = params;
 
@@ -207,11 +207,9 @@ classdef testReplay < matlab.unittest.TestCase
             end
 
             phi = -2*pi*p.fc * (p.v_const/c) .* t_delay;
-            phi_sin = zeros(size(t_delay));
             if p.n_cycles > 0
-                phi_sin = p.fc * p.v_amp * T_ch / (c * p.n_cycles) ...
+                phi = phi + p.fc * p.v_amp * T_ch / (c * p.n_cycles) ...
                     * (cos(omega_osc * t_delay) - 1);
-                phi = phi + phi_sin;
             end
 
             %% 3. Build h_hat
@@ -370,12 +368,6 @@ classdef testReplay < matlab.unittest.TestCase
 
                 % Weighted mean delay comparison
                 n_found = length(locs);
-                est_delays = lags_win(locs) / fs;
-                est_gains = xcor_win(locs);
-                [~, idx_e] = sort(est_delays);
-                [~, idx_t] = sort(path_delay_0(:, m));
-
-                n_found = length(locs);
                 if n_found == p.n_path
                     est_delays = sort(lags_win(locs) / fs);
                     true_delays = sort(path_delay_0(:, m));
@@ -412,7 +404,7 @@ classdef testReplay < matlab.unittest.TestCase
             %      input replays to an output whose per-channel variance is O(1).
 
             c = testCase.c;
-            fs = testCase.fs;
+            fs = testCase.fs_tx;
             start = testCase.start;
 
             fc = 12e3; fs_delay = 10e3; fs_time = 20;
