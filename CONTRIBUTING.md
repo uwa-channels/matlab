@@ -18,10 +18,10 @@ Each `.mat` file must include the following variables:
 * **Type**: Multi-dimensional complex tensor.
 * **Dimensions**: `[delay, receiver, time]`
 * **Units**:
-  * Delay axis: sampled at `params.fs_delay` [Hz], denoted $f_s = 1/T_s$
+  * Delay axis: sampled at `params.fs_delay` [Hz], denoted $`f_s = 1/T_s`$
   * Time axis: sampled at `params.fs_time` [Hz]
   * Amplitude: complex baseband impulse response (unitless)
-* **Description**: The estimated time-varying channel impulse response (TVIR) as a function of delay $\tau$ and time $t$. When delay tracking is used, this is the drift-free response $\hat{\underline{h}}(\tau, t)$; otherwise it is the drifting response $\hat{h}(\tau, t)$. For a given receiver and time index $n$, the slice along the delay axis is the channel vector $\hat{\underline{\mathbf{h}}}[n]$, or $\hat{\mathbf{h}}[n]$ in the drifting case.
+* **Description**: The estimated time-varying channel impulse response (TVIR) as a function of delay $`\tau`$ and time $`t`$. When delay tracking is used, this is the drift-free response $`\hat{\underline{h}}(\tau, t)`$; otherwise it is the drifting response $`\hat{h}(\tau, t)`$. For a given receiver and time index $`n`$, the slice along the delay axis is the channel vector $`\hat{\underline{\mathbf{h}}}[n]`$, or $`\hat{\mathbf{h}}[n]`$ in the drifting case.
 
 ### `params`
 
@@ -29,9 +29,9 @@ A structure with the following scalar fields:
 
 | Field | Type | Unit | Description |
 |-------|------|------|-------------|
-| `fs_delay` | scalar | Hz | Sampling rate $f_s$ along the delay axis. |
+| `fs_delay` | scalar | Hz | Sampling rate $`f_s`$ along the delay axis. |
 | `fs_time` | scalar | Hz | Sampling rate along the time axis. |
-| `fc` | scalar | Hz | Center frequency $f_c$ of the signal used during channel estimation. |
+| `fc` | scalar | Hz | Center frequency $`f_c`$ of the signal used during channel estimation. |
 
 ### `version`
 
@@ -53,28 +53,34 @@ The estimation scripts save their one tracked phase as `phi_hat` with delay trac
 * **Type**: Numeric matrix, size `[receiver, time]`
 * **Units**: Radians
 * **Sampling rate**: `params.fs_delay`
-* **Description**: The phase estimate $\hat\varphi(nT_s)$, a time-varying phase that encodes *both* phase rotation and delay drift. In this mode, `h_hat` holds the drift-free response $\hat{\underline{h}}(\tau, t)$. Let $\Delta\tau$ denote the delay drift common to all propagation paths. It is related to the phase by
+* **Description**: The phase estimate $`\hat\varphi(nT_s)`$, a time-varying phase that encodes *both* phase rotation and delay drift. In this mode, `h_hat` holds the drift-free response $`\hat{\underline{h}}(\tau, t)`$. Let $`\Delta\tau`$ denote the delay drift common to all propagation paths. It is related to the phase by
 
-  $$\hat\varphi(nT_s) = -2\pi f_c\, \Delta\tau(nT_s)$$
+  ```math
+  \hat\varphi(nT_s) = -2\pi f_c\, \Delta\tau(nT_s)
+  ```
 
-  Unpacking first reinserts the phase, multiplying the drift-free response by $e^{j\hat\varphi(nT_s)}$ to obtain the signal $\bar y_{\text{r}}(nT_s)$. It then reinserts the delay drift by evaluating that signal at shifted instants,
+  Unpacking first reinserts the phase, multiplying the drift-free response by $`e^{j\hat\varphi(nT_s)}`$ to obtain the signal $`\bar y_{\text{r}}(nT_s)`$. It then reinserts the delay drift by evaluating that signal at shifted instants,
 
-  $$\bar v_{\text{r}}(nT_s) = \mathcal{I}\left[\bar y_{\text{r}}\left(nT_s + \frac{\hat\varphi(nT_s)}{2\pi f_c}\right)\right]$$
+  ```math
+  \bar v_{\text{r}}(nT_s) = \mathcal{I}\left[\bar y_{\text{r}}\left(nT_s + \frac{\hat\varphi(nT_s)}{2\pi f_c}\right)\right]
+  ```
 
-  where $\mathcal{I}[\cdot]$ denotes interpolation, implemented here as spline interpolation.
+  where $`\mathcal{I}[\cdot]`$ denotes interpolation, implemented here as spline interpolation.
 
-  `phi_hat` accumulates over the whole record, so its absolute value can reach hundreds of samples of delay. `replay` therefore reinserts it relative to the starting sample, $\hat\varphi(nT_s) - \hat\varphi(n_0T_s)$ for a replay that starts at sample $n_0$: the output starts aligned with the input wherever in the channel the replay starts, and it is padded by the largest delay the drift reaches within the replay.
+  `phi_hat` accumulates over the whole record, so its absolute value can reach hundreds of samples of delay. `replay` therefore reinserts it relative to the starting sample, $`\hat\varphi(nT_s) - \hat\varphi(n_0T_s)`$ for a replay that starts at sample $`n_0`$: the output starts aligned with the input wherever in the channel the replay starts, and it is padded by the largest delay the drift reaches within the replay.
 
 ### `theta_hat` (phase tracking only)
 
 * **Type**: Numeric matrix, size `[receiver, time]`
 * **Units**: Radians
 * **Sampling rate**: `params.fs_delay`
-* **Description**: The phase estimate $\hat\theta(nT_s)$, a time-varying phase correction. In this mode, `h_hat` contains the *drifting* impulse response $\hat{h}(\tau, t)$ (delay drift is embedded in the taps). Only the phase is tracked separately. The baseband received signal is modeled as:
+* **Description**: The phase estimate $`\hat\theta(nT_s)`$, a time-varying phase correction. In this mode, `h_hat` contains the *drifting* impulse response $`\hat{h}(\tau, t)`$ (delay drift is embedded in the taps). Only the phase is tracked separately. The baseband received signal is modeled as:
 
-  $$v(t) = \sum_n d(n)\, h(t - nT, t)\, e^{j\theta(t)} + w(t)$$
+  ```math
+  v(t) = \sum_n d(n)\, h(t - nT, t)\, e^{j\theta(t)} + w(t)
+  ```
 
-  where $d(n)$ are the transmitted data symbols, $h(\tau, t)$ is the time-varying impulse response at delay $\tau$ and time $t$ with drifting taps, $T$ is the symbol interval, $\theta(t)$ is the channel phase, and $w(t)$ is the additive complex baseband noise.
+  where $`d(n)`$ are the transmitted data symbols, $`h(\tau, t)`$ is the time-varying impulse response at delay $`\tau`$ and time $`t`$ with drifting taps, $`T`$ is the symbol interval, $`\theta(t)`$ is the channel phase, and $`w(t)`$ is the additive complex baseband noise.
 
 ### Duration constraint
 
@@ -90,7 +96,7 @@ size(theta_hat, 2) / params.fs_delay == size(h_hat, 3) / params.fs_time
 
 * **Type**: Scalar, or vector of size `[receiver, 1]` or `[1, receiver]` (double precision)
 * **Units**: Unitless resampling factor
-* **Description**: A time-invariant resampling factor applied to the output signal. A scalar applies to every receiver; a vector holds one factor per receiver, in the order of the second dimension of `h_hat`, and is indexed by `array_index` like the rows of `phi_hat`. `replay` resamples each output column by its own factor and zero-pads the shorter columns to the longest. This is typically the inverse of a resampling operation applied to remove the nominal Doppler frequency offset before channel estimation. `replay` applies it after the time-varying convolution, by resampling the output. `unpack` instead converts it into a linear phase ramp $(1/f_{\text{resamp}} - 1)\,2\pi f_c t$, which it reinserts as both a phase and a delay drift, in the same way as `phi_hat`.
+* **Description**: A time-invariant resampling factor applied to the output signal. A scalar applies to every receiver; a vector holds one factor per receiver, in the order of the second dimension of `h_hat`, and is indexed by `array_index` like the rows of `phi_hat`. `replay` resamples each output column by its own factor and zero-pads the shorter columns to the longest. This is typically the inverse of a resampling operation applied to remove the nominal Doppler frequency offset before channel estimation. `replay` applies it after the time-varying convolution, by resampling the output. `unpack` instead converts it into a linear phase ramp $`(1/f_{\text{resamp}} - 1)\,2\pi f_c t`$, which it reinserts as both a phase and a delay drift, in the same way as `phi_hat`.
 
 ### `meta`
 
@@ -99,21 +105,21 @@ The `meta` structure is optional but strongly encouraged. The following fields a
 | Field | Type | Description |
 |-------|------|-------------|
 | `description` | string | Free-text description of the experiment. |
-| `nsd` | scalar | Samples per symbol $N_s$ in the delay domain. |
+| `nsd` | scalar | Samples per symbol $`N_s`$ in the delay domain. |
 | `nst` | scalar | Samples per symbol in the time domain. |
 | `K_1` | scalar | Anti-causal filter length [symbols]. |
 | `K_2` | scalar | Causal filter length [symbols]. |
-| `fc` | scalar | Center frequency $f_c$ [Hz]. |
-| `element_spacing` | scalar | Array element spacing $\ell$ [m]. |
+| `fc` | scalar | Center frequency $`f_c`$ [Hz]. |
+| `element_spacing` | scalar | Array element spacing $`\ell`$ [m]. |
 | `vertical` | logical | `true` if vertical array. |
 | `delay_tracking` | logical | `true` if delay tracking is enabled (`phi_hat` present). |
 | `limit` | scalar | Lower dB limit for plotting. |
 | `optim` | scalar | Optimizer used: `1` LMS, `2` RLS, `3` SFTF. |
-| `mu` | scalar | LMS step size $\mu$ (when `optim == 1`). |
-| `lambda` | scalar | Forgetting factor $\lambda$ (when `optim == 2` or `3`). |
+| `mu` | scalar | LMS step size $`\mu`$ (when `optim == 1`). |
+| `lambda` | scalar | Forgetting factor $`\lambda`$ (when `optim == 2` or `3`). |
 | `regularization` | scalar | Regularization factor (when `optim == 2` or `3`). |
-| `Kf_1` | scalar | PLL loop filter coefficient $K_{f_1}$. |
-| `Kf_2` | scalar | PLL loop filter coefficient $K_{f_2}$. |
+| `Kf_1` | scalar | PLL loop filter coefficient $`K_{f_1}`$. |
+| `Kf_2` | scalar | PLL loop filter coefficient $`K_{f_2}`$. |
 | `nslr` | scalar | Delay tracking rate (when `delay_tracking == true`). |
 | `codename` | string | Short identifier for the channel (e.g., `"blue_1"`). |
 
@@ -125,15 +131,17 @@ Each noise `.mat` file contains the following fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `Fs` | scalar | Sampling rate $f_s$ at which noise statistics were measured [Hz]. |
-| `R` | scalar | Bandwidth $B$ of the recorded noise [Hz]. Despite the field name, this is not the symbol rate $R$ used on the channel pages. |
-| `alpha` | scalar | Characteristic exponent $\alpha$ of the symmetric $\alpha$-stable distribution: `2` Gaussian, `< 2` impulsive. |
-| `beta` | tensor `[M, M, L+1]` | Mixing coefficients $\beta_{ij}(kT_s)$ for spatiotemporal noise coloring, where $M$ is the number of array elements and $L$ is the maximum lag (both defined below). |
-| `fc` | scalar | Center frequency $f_c$ [Hz]. |
+| `Fs` | scalar | Sampling rate $`f_s`$ at which noise statistics were measured [Hz]. |
+| `R` | scalar | Bandwidth $`B`$ of the recorded noise [Hz]. Despite the field name, this is not the symbol rate $`R`$ used on the channel pages. |
+| `alpha` | scalar | Characteristic exponent $`\alpha`$ of the symmetric $`\alpha`$-stable distribution: `2` Gaussian, `< 2` impulsive. |
+| `beta` | tensor `[M, M, L+1]` | Mixing coefficients $`\beta_{ij}(kT_s)`$ for spatiotemporal noise coloring, where $`M`$ is the number of array elements and $`L`$ is the maximum lag (both defined below). |
+| `fc` | scalar | Center frequency $`f_c`$ [Hz]. |
 | `version` | scalar | Noise struct version number. `noisegen` rejects files with a version below `1.0`. |
 
-`noisegen` reads only `Fs`, `alpha`, `beta`, and `version`; it generates the noise at `Fs` and resamples it to the requested rate. `beta` is normalized over the whole array: the expected noise powers of all $M$ elements sum to $M$, and each element keeps its measured power relative to the others. The noise generated for a subset of elements (`array_index`) therefore need not sum to the size of the subset. When $\alpha < 2$ the variance is undefined, and the pseudo-power $2c^2$, with $c$ the scale parameter, takes its place. The noise generation function `noisegen` uses the mixing equation:
+`noisegen` reads only `Fs`, `alpha`, `beta`, and `version`; it generates the noise at `Fs` and resamples it to the requested rate. `beta` is normalized over the whole array: the expected noise powers of all $`M`$ elements sum to $`M`$, and each element keeps its measured power relative to the others. The noise generated for a subset of elements (`array_index`) therefore need not sum to the size of the subset. When $`\alpha \lt 2`$ the variance is undefined, and the pseudo-power $`2c^2`$, with $`c`$ the scale parameter, takes its place. The noise generation function `noisegen` uses the mixing equation:
 
-$$\hat{n}_i(nT_s) = \sum_{j=0}^{M-1}\sum_{k=0}^{L}\beta_{ij}(kT_s)\,\eta_j(nT_s + kT_s)$$
+```math
+\hat{n}_i(nT_s) = \sum_{j=0}^{M-1}\sum_{k=0}^{L}\beta_{ij}(kT_s)\,\eta_j(nT_s + kT_s)
+```
 
-Here $\hat{n}_i$ is the synthetically generated noise on hydrophone $i$, with the hydrophone indices running as $i, j = 0, \ldots, M-1$. The sampling interval is $T_s = 1/f_s$, the sampling rate $f_s$ being stored in the `Fs` field, and $L$ is the maximum discrete time lag with non-negligible covariance, so that $\beta_{ij}(kT_s)$ has $L+1$ taps, $k = 0, \ldots, L$. The innovations $\eta_j(nT_s) \sim \mathcal{S}_\alpha(0, 1/\sqrt{2})$ are i.i.d. symmetric $\alpha$-stable variates with zero location and scale $1/\sqrt{2}$; this scale ensures that the distribution reduces to the standard Gaussian $\mathcal{N}(0, 1)$ when $\alpha = 2$. The sum runs forward in time, $\eta_j(nT_s + kT_s)$, which is the convention under which `beta` is estimated by [NoiseModels.jl](https://github.com/org-arl/NoiseModels.jl). For an array, mixing backward instead, $\eta_j(nT_s - kT_s)$, reverses the time direction of the correlation between elements while leaving the zero-lag covariance unchanged.
+Here $`\hat{n}_i`$ is the synthetically generated noise on hydrophone $`i`$, with the hydrophone indices running as $`i, j = 0, \ldots, M-1`$. The sampling interval is $`T_s = 1/f_s`$, the sampling rate $`f_s`$ being stored in the `Fs` field, and $`L`$ is the maximum discrete time lag with non-negligible covariance, so that $`\beta_{ij}(kT_s)`$ has $`L+1`$ taps, $`k = 0, \ldots, L`$. The innovations $`\eta_j(nT_s) \sim \mathcal{S}_\alpha(0, 1/\sqrt{2})`$ are i.i.d. symmetric $`\alpha`$-stable variates with zero location and scale $`1/\sqrt{2}`$; this scale ensures that the distribution reduces to the standard Gaussian $`\mathcal{N}(0, 1)`$ when $`\alpha = 2`$. The sum runs forward in time, $`\eta_j(nT_s + kT_s)`$, which is the convention under which `beta` is estimated by [NoiseModels.jl](https://github.com/org-arl/NoiseModels.jl). For an array, mixing backward instead, $`\eta_j(nT_s - kT_s)`$, reverses the time direction of the correlation between elements while leaving the zero-lag covariance unchanged.
