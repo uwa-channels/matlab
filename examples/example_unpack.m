@@ -25,11 +25,9 @@ fs_time = fs_delay * 0.005;
 array_index = [1, 3, 5];
 
 %% Unpack the channel
-% Buffer fraction for impulse response padding. Increase these values if the
-% impulse responses slide out of the window.
-buffer_left = 0.1;
-buffer_right = 0.1;
-unpacked = unpack(fs_time, array_index, channel, buffer_left, buffer_right);
+% The delay axis is padded to hold the delay drift.  To pad by a fraction of
+% the taps instead, pass it: unpack(fs_time, array_index, channel, 0.1, 0.1).
+unpacked = unpack(fs_time, array_index, channel);
 
 %% Visualize
 delay_axis = (0:size(unpacked, 1) - 1) ./ fs_delay;

@@ -33,6 +33,8 @@ classdef testUnpack < matlab.unittest.TestCase
     %                    per hydrophone, and removed the scalar f_resamp
     %                    (Watermark) cases from testUnpackFunction.
     %                    Added testInvalidInputs for validate_inputs.
+    %   - Nov.  4, 2026: testVectorFResamp and testInvalidInputs check the
+    %                    automatic padding unpack applies without buffers.
 
     properties (Constant)
         c = 1500;
@@ -439,6 +441,27 @@ classdef testUnpack < matlab.unittest.TestCase
                     (tau0 - excess(m) * T) * 1e3));
             end
 
+            % Without buffers, the padding is the largest drift on each side:
+            % excess * t * fs_delay samples at the last t, 16 on the left for
+            % the largest positive excess and 48 on the right for the most
+            % negative (more than the 39 of a 0.3 buffer).  Where the two
+            % overlap they must agree, and the 0.3 buffers must hold nothing
+            % to the left of the automatic padding.
+            n_phi = ceil(N_time * fs_delay / fs_time);
+            n_auto = ceil(max(excess) * (n_phi - 1));
+            u_auto = unpack(fs_out, 1:M, channel);
+            testCase.verifyEqual(size(u_auto, 1), ...
+                L + n_auto + ceil(-min(excess) * (n_phi - 1)));
+            skip = n_left - n_auto;
+            n = size(u, 1) - skip;
+            err = max(abs(u_auto(1:n, :, :) - u(skip + 1:end, :, :)), [], 'all') ...
+                / max(abs(u), [], 'all');
+            testCase.verifyLessThan(err, 1e-9, sprintf(['unpack without ', ...
+                'buffers differs from unpack with 0.3 buffers (relative ', ...
+                'err = %.2e).'], err));
+            testCase.verifyLessThan(max(abs(u(1:skip, :, :)), [], 'all'), 1e-9, ...
+                'The 0.3 buffers hold energy that the automatic padding drops.');
+
             figure('Name', 'vector_f_resamp');
             for m = 1:M
                 subplot(1, M, m);
@@ -486,6 +509,9 @@ classdef testUnpack < matlab.unittest.TestCase
 
             testCase.verifyWarningFree(@() unpack(fs, 1:M, channel));
             testCase.verifyWarningFree(@() unpack(fs, [3, 1], channel, 0, 0.5));
+            testCase.verifyWarningFree(@() unpack(fs, 1, channel, [], 0.5));
+            % No drift, so the automatic padding adds nothing.
+            testCase.verifyEqual(size(unpack(fs, 1, channel), 1), L);
 
             bad = channel; bad.version = 0.9;
             testCase.verifyError(@() unpack(fs, 1, bad), 'unpack:invalidVersion');

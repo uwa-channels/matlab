@@ -5,7 +5,10 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 % unpacked channel impulse response resampled to FS along the time axis.
 %
 % UNPACKED_CHANNEL = UNPACK(FS, ARRAY_INDEX, CHANNEL, BUF_LEFT, BUF_RIGHT)
-% specifies the buffer ratios for padding the delay axis.
+% specifies the buffer ratios for padding the delay axis, as fractions of the
+% number of taps.  Without them, or for a buffer given as [], the delay axis
+% is padded with just enough zeros to hold the largest delay drift, so a
+% channel without drift is not padded.
 %
 % The function handles three tracking modes:
 %   theta_hat (phase tracking only):
@@ -69,12 +72,14 @@ function unpacked_channel = unpack(fs, array_index, channel, varargin)
 %                    Added validate_inputs, which checks the channel
 %                    version, fs, array_index, the buffers and f_resamp
 %                    before unpacking, as replay.m does.
+%   - Nov.  4, 2026: The buffers default to the room the delay drift needs,
+%                    instead of 0.1 each, and [] asks for that default.
 %
 
 %% Buffers and simple checks
 if nargin == 3
-    buffer_left = 0.1;
-    buffer_right = 0.1;
+    buffer_left = [];
+    buffer_right = [];
 else
     assert(nargin == 5, 'unpack:invalidBuffer', ...
         'Give both buffers, BUF_LEFT and BUF_RIGHT, or neither.');
@@ -125,7 +130,14 @@ if isfield(channel, 'f_resamp')
 end
 
 %% Allocate buffer
-h_hat = [zeros(ceil(K*buffer_left), M, T); h_hat; zeros(ceil(K*buffer_right), M, T)];
+% By default, room for the drift: a tap at delay tau moves to tau - drift, so
+% a positive drift needs room on the left and a negative one on the right.
+drift_samples = phase_drift / (2 * pi * fc) * fs_delay;
+n_left = ceil(max([drift_samples(:); 0]));
+n_right = ceil(max([-drift_samples(:); 0]));
+if ~isempty(buffer_left); n_left = ceil(K*buffer_left); end
+if ~isempty(buffer_right); n_right = ceil(K*buffer_right); end
+h_hat = [zeros(n_left, M, T); h_hat; zeros(n_right, M, T)];
 K = size(h_hat, 1);
 
 %% Sample rate conversion
@@ -186,9 +198,9 @@ assert(min(index) >= 1 && max(index) <= N, 'unpack:invalidArrayIndex', ...
 
 % Check the buffers
 for b = {buffer_left, buffer_right}
-    assert(isnumeric(b{1}) && isscalar(b{1}) && isreal(b{1}) ...
-        && isfinite(b{1}) && b{1} >= 0, 'unpack:invalidBuffer', ...
-        'The buffers must be non-negative, finite scalars.');
+    assert(isempty(b{1}) || (isnumeric(b{1}) && isscalar(b{1}) && isreal(b{1}) ...
+        && isfinite(b{1}) && b{1} >= 0), 'unpack:invalidBuffer', ...
+        'The buffers must be non-negative, finite scalars, or [].');
 end
 
 % Check the resampling factors
