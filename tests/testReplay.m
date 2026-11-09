@@ -30,6 +30,12 @@ classdef testReplay < matlab.unittest.TestCase
     %                    for one resampling factor per hydrophone, and
     %                    testVectorFResampSharedCIR, which draws them.
     %                    Removed the scalar f_resamp (Watermark) cases.
+    %   - Nov.  9, 2026: testReplayPower normalizes h_hat as the channel
+    %                    files are, to M/N_s with N_s = fs_delay/R samples
+    %                    per symbol, confines its response to the signal
+    %                    band, and checks that a unit-power probe over the
+    %                    full channel length gives output powers summing to
+    %                    M, for N_s = 1 and N_s = 2.
 
     properties (Constant)
         c = 1500;
@@ -38,6 +44,7 @@ classdef testReplay < matlab.unittest.TestCase
     end
 
     properties (TestParameter)
+        nsd = struct('fullBand', 1, 'halfBand', 2);
         params = { ...
             ...
             ... %% === Static ===
@@ -393,25 +400,35 @@ classdef testReplay < matlab.unittest.TestCase
                 sprintf('Peak delay mismatch for case: %s', p.label));
         end
 
-        function testReplayPower(testCase)
-            % Two checks for the array_index API:
+        function testReplayPower(testCase, nsd)
+            % Two checks for the array_index API and the h_hat normalization:
             %   1. Isolation: replaying through a single hydrophone must equal the
             %      corresponding column of a replay through all hydrophones (same
             %      start). This holds only because output normalization was removed,
             %      so each channel is processed independently of the selected set.
-            %   2. Power: after normalizing the channel matrix so the average
-            %      per-channel energy is 1 (cf. calib.m), a unit-variance passband
-            %      input replays to an output whose per-channel variance is O(1).
+            %   2. Power: a channel file estimated at N_s = fs_delay/R samples
+            %      per symbol holds a response confined to the signal band
+            %      |f| <= R/2, and its h_hat is normalized so that the energy
+            %      over the taps and all M hydrophones, averaged over time, is
+            %      M/N_s.  A unit-power passband signal of bandwidth R replayed
+            %      through all M hydrophones over the full length of the
+            %      channel must then give output powers that sum to M.  A subset
+            %      of the hydrophones need not give a proportional share of M,
+            %      since their powers differ, and a short signal need not give
+            %      M, since it sees only part of the fading.
 
             c = testCase.c;
             fs = testCase.fs_tx;
-            start = testCase.start;
 
-            fc = 12e3; fs_delay = 10e3; fs_time = 20;
-            M = 4; n_path = 8; R = 4e3; Tmp = 15e-3; coeff = 1.5; d = 0.5;
+            fc = 12e3; R = 4e3; fs_delay = nsd * R; fs_time = 20;
+            M = 4; n_path = 8; Tmp = 15e-3; coeff = 1.5; d = 0.5;
             T_ch = 5;
 
-            %% 1. Multipath geometry (static channel)
+            %% 1. Multipath geometry, with a Doppler shift on each path
+            % The shifts move the fades of the frequency response across the
+            % band during the channel, as fading does, so that a replay over
+            % the full length averages them.  A static channel keeps its
+            % fades, and its output power depends on where they fall.
             path_delay_0 = [0; sort(randsamples( ...
                 (pi/3:Tmp*1e3) / 1e3, n_path - 1)).'];
             incremental_delay = (0:M-1) * d / c;
@@ -419,18 +436,29 @@ classdef testReplay < matlab.unittest.TestCase
             path_delay_0 = path_delay_0 - min(path_delay_0, [], 'all');
             path_gain = exp(-path_delay_0 * coeff ./ Tmp);
             c_p = path_gain .* exp(-1j * 2 * pi * fc * path_delay_0);
+            f_doppler = 4 * (rand(n_path, 1) - 0.5);   % within +/- 2 Hz
 
             L = ceil(fs_delay * Tmp * 1.5);
             N_time = round(T_ch * fs_time);
-            h_hat_static = place_taps(L, M, path_delay_0, c_p, Tmp, fs_delay);
-            h_hat = repmat(h_hat_static, 1, 1, N_time);
+            h_hat = zeros(L, M, N_time);
+            for k = 1:N_time
+                rotation = exp(2j * pi * f_doppler * (k - 1) / fs_time);
+                h_hat(:, :, k) = place_taps(L, M, path_delay_0, ...
+                    c_p .* rotation, Tmp, fs_delay);
+            end
 
-            %% 2. Normalize so the average per-channel energy is 1 (cf. calib.m)
-            T = size(h_hat, 3);
-            E_tot = sum(abs(h_hat(:)).^2);
-            E_tot_avg = E_tot / T;
-            alpha = sqrt(M / E_tot_avg);
-            h_hat = alpha * h_hat;
+            %% 2. Confine the response to the signal band, as an estimate is
+            % The cutoff R/2 is 1/N_s of the Nyquist frequency fs_delay/2.
+            if nsd > 1
+                n_fir = 64;
+                h_hat = filter(fir1(n_fir, 1/nsd), 1, ...
+                    cat(1, h_hat, zeros(n_fir, M, N_time)), [], 1);
+            end
+            L = size(h_hat, 1);
+
+            %% 3. Normalize as the channel files are: energy M/N_s
+            E_avg = sum(abs(h_hat).^2, 'all') / N_time;
+            h_hat = sqrt(M / nsd / E_avg) * h_hat;
 
             channel = struct();
             channel.h_hat = h_hat;
@@ -439,18 +467,27 @@ classdef testReplay < matlab.unittest.TestCase
             channel.params.fc = fc;
             channel.version = 1.0;
 
-            %% 3. Unit-variance passband probe
-            data_symbols = randi([0, 1], 8192, 1) * 2 - 1;
-            baseband = resample(data_symbols, fs / R, 1);
+            %% 4. Unit-power passband probe in the signal band, as long as the channel
+            % The probe is 0.9 R wide: with N_s = 1 the band fills the whole
+            % delay band, and the resampler in replay attenuates its edges,
+            % which would cost a probe of width R about 6% of its power.
+            % replay needs T + L samples at fs_delay after the start, and
+            % the channel holds N_time / fs_time * fs_delay of them.
+            B = 0.9 * R;
+            T_max = N_time / fs_time * fs_delay;
+            n_sym = floor((T_max - L - 2) / fs_delay * B);
+            data_symbols = sign(randn(n_sym, 1)) + 1j * sign(randn(n_sym, 1));
+            [p, q] = rat(fs / B);
+            baseband = resample(data_symbols, p, q);
             passband = real(baseband .* exp(1j*2*pi*fc*(0:length(baseband)-1).'/fs));
-            passband = passband ./ sqrt(var(passband));
+            passband = passband ./ sqrt(mean(passband.^2));
 
-            %% 4. Replay one channel, and all channels, with the same start
+            %% 5. Replay one channel, and all channels, from the first sample
             target_ch = 3;
-            r_single = replay(passband, fs, target_ch, channel, start);
-            r_all = replay(passband, fs, 1:M, channel, start);
+            r_single = replay(passband, fs, target_ch, channel, 1);
+            r_all = replay(passband, fs, 1:M, channel, 1);
 
-            %% 5. Check 1: isolation
+            %% 6. Check 1: isolation
             n = min(size(r_single, 1), size(r_all, 1));
             ref = r_all(1:n, target_ch);
             err = max(abs(r_single(1:n, 1) - ref)) / max(abs(ref));
@@ -458,13 +495,13 @@ classdef testReplay < matlab.unittest.TestCase
                 sprintf(['Single-channel replay does not match column %d of the ' ...
                 'full replay (relative err = %.2e).'], target_ch, err));
 
-            %% 6. Check 2: per-channel output power is O(1)
-            mean_var = mean(var(r_all));
-            % fprintf('testReplayPower: per-channel output power mean = %.3f\n', mean_var);
-            testCase.verifyGreaterThan(mean_var, 0.93, ...
-                sprintf('Mean output power %.3f is unexpectedly small.', mean_var));
-            testCase.verifyLessThan(mean_var, 1.07, ...
-                sprintf('Mean output power %.3f is unexpectedly large.', mean_var));
+            %% 7. Check 2: the output powers over all M hydrophones sum to M
+            % The output energy is divided by the input length, so the tail
+            % that the channel adds to the output does not lower the power.
+            P = sum(r_all.^2, 1) / length(passband);
+            testCase.verifyEqual(sum(P), M, 'RelTol', 0.05, ...
+                sprintf(['Output powers sum to %.3f, not M = %d, with N_s = %d ' ...
+                'and h_hat normalized to M/N_s.'], sum(P), M, nsd));
         end
 
         function testLateStartKeepsTheEnd(testCase)

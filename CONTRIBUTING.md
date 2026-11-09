@@ -22,6 +22,19 @@ Each `.mat` file must include the following variables:
   * Time axis: sampled at `params.fs_time` [Hz]
   * Amplitude: complex baseband impulse response (unitless)
 * **Description**: The estimated time-varying channel impulse response (TVIR) as a function of delay $`\tau`$ and time $`t`$. When delay tracking is used, this is the drift-free response $`\hat{\underline{h}}(\tau, t)`$; otherwise it is the drifting response $`\hat{h}(\tau, t)`$. For a given receiver and time index $`n`$, the slice along the delay axis is the channel vector $`\hat{\underline{\mathbf{h}}}[n]`$, or $`\hat{\mathbf{h}}[n]`$ in the drifting case.
+* **Normalization**: `h_hat` is scaled so that a passband signal of unit power, in the band the channel was estimated in and replayed through all $`M`$ receivers in the file over the full length of the channel, gives output powers that sum to $`M`$. `replay` does not rescale its output, so `h_hat` alone sets this power. Each receiver keeps its measured power relative to the others, so a subset selected with `array_index` need not give a proportional share of $`M`$. A short replay need not give $`M`$ either, because it sees only part of the fading.
+
+  The estimate is made at $`N_s = f_s/R`$ samples per symbol, where $`R`$ is the symbol rate, so its response is confined to the signal band, a fraction $`1/N_s`$ of the delay band. The criterion then fixes the energy of the taps. Let $`\hat h_m[l, n]`$ be tap $`l`$ of receiver $`m`$ at time index $`n`$, with $`N_\tau`$ taps and $`N_t`$ time samples. Averaged over time, the energy summed over all taps and receivers is
+
+  ```math
+  \frac{1}{N_t}\sum_{n=0}^{N_t-1}\sum_{m=0}^{M-1}\sum_{l=0}^{N_\tau-1}\left|\hat h_m[l, n]\right|^2 = \frac{M}{N_s}
+  ```
+
+  `meta.nsd` stores $`N_s`$. When it is absent, $`N_s = 2`$. This is the value the [estimate](https://github.com/uwa-channels/estimate) example uses and the value in every released file, so the released energies equal $`M/2`$. Check the normalization with
+
+  ```matlab
+  sum(abs(h_hat).^2, 'all') / size(h_hat, 3)   % must equal size(h_hat, 2) / meta.nsd
+  ```
 
 ### `params`
 
@@ -105,7 +118,7 @@ The `meta` structure is optional but strongly encouraged. The following fields a
 | Field | Type | Description |
 |-------|------|-------------|
 | `description` | string | Free-text description of the experiment. |
-| `nsd` | scalar | Samples per symbol $`N_s`$ in the delay domain. |
+| `nsd` | scalar | Samples per symbol $`N_s`$ in the delay domain. It sets the normalization of `h_hat` (see [`h_hat`](#h_hat)); `2` when absent. |
 | `nst` | scalar | Samples per symbol in the time domain. |
 | `K_1` | scalar | Anti-causal filter length [symbols]. |
 | `K_2` | scalar | Causal filter length [symbols]. |
